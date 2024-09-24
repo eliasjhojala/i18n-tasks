@@ -4,6 +4,7 @@ require 'find'
 require 'i18n/tasks/scanners/pattern_with_scope_scanner'
 require 'i18n/tasks/scanners/ruby_ast_scanner'
 require 'i18n/tasks/scanners/erb_ast_scanner'
+require 'i18n/tasks/scanners/prism_scanner'
 require 'i18n/tasks/scanners/scanner_multiplexer'
 require 'i18n/tasks/scanners/files/caching_file_finder_provider'
 require 'i18n/tasks/scanners/files/caching_file_reader'
@@ -24,12 +25,13 @@ module I18n::Tasks
         ['::I18n::Tasks::Scanners::ErbAstScanner', { only: %w[*.erb] }],
         ['::I18n::Tasks::Scanners::PatternWithScopeScanner', { exclude: %w[*.erb *.rb] }]
       ],
+      ast_matchers: [],
       strict: true
     }.freeze
 
-    ALWAYS_EXCLUDE = %w[*.jpg *.jpeg *.png *.gif *.svg *.ico *.eot *.otf *.ttf *.woff *.woff2 *.pdf *.css *.sass *.scss *.less
-                        *.yml *.json *.zip *.tar.gz *.swf *.flv *.mp3 *.wav *.flac *.webm *.mp4 *.ogg *.opus
-                        *.webp *.map].freeze
+    ALWAYS_EXCLUDE = %w[*.jpg *.jpeg *.png *.gif *.svg *.ico *.eot *.otf *.ttf *.woff *.woff2 *.pdf *.css *.sass *.scss
+                        *.less *.yml *.json *.zip *.tar.gz *.swf *.flv *.mp3 *.wav *.flac *.webm *.mp4 *.ogg *.opus
+                        *.webp *.map *.xlsx].freeze
 
     # Find all keys in the source and return a forest with the keys in absolute form and their occurrences.
     #
@@ -141,7 +143,7 @@ module I18n::Tasks
 
     # keys in the source that end with a ., e.g. t("category.#{ cat.i18n_key }") or t("category." + category.key)
     # @param [String] replacement for interpolated values.
-    def expr_key_re(replacement: ':')
+    def expr_key_re(replacement: '*:')
       @expr_key_re ||= begin
         # disallow patterns with no keys
         ignore_pattern_re = /\A[.#{replacement}]*\z/
@@ -177,7 +179,7 @@ module I18n::Tasks
           braces << '{'
         end
       end
-      result << key[scanner.pos..-1] unless scanner.eos?
+      result << key[scanner.pos..] unless scanner.eos?
       result.join
     end
   end

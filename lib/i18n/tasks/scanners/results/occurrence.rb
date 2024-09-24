@@ -48,7 +48,7 @@ module I18n::Tasks
         # rubocop:enable Metrics/ParameterLists
 
         def inspect
-          "Occurrence(#{@path}:#{@line_num}:#{@line_pos}:#{@pos}:#{@raw_key}:#{@default_arg}:#{@line})"
+          "Occurrence(#{@path}:#{@line_num}, line_pos: #{@line_pos}, pos: #{@pos}, raw_key: #{@raw_key}, default_arg: #{@default_arg}, line: #{@line})" # rubocop:disable Layout/LineLength
         end
 
         def ==(other)
@@ -62,6 +62,22 @@ module I18n::Tasks
 
         def hash
           [@path, @pos, @line_num, @line_pos, @line, @default_arg].hash
+        end
+
+        # @param raw_key [String]
+        # @param range [Parser::Source::Range]
+        # @param default_arg [String, nil]
+        # @return [Results::Occurrence]
+        def self.from_range(raw_key:, range:, default_arg: nil)
+          Occurrence.new(
+            path: range.source_buffer.name,
+            pos: range.begin_pos,
+            line_num: range.line,
+            line_pos: range.column,
+            line: range.source_line,
+            raw_key: raw_key,
+            default_arg: default_arg
+          )
         end
       end
     end

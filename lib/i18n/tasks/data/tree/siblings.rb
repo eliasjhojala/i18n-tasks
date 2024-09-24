@@ -3,7 +3,6 @@
 require 'set'
 require 'i18n/tasks/split_key'
 require 'i18n/tasks/data/tree/nodes'
-require 'i18n/tasks/data/tree/node'
 
 module I18n::Tasks::Data::Tree
   # Siblings represents a subtree sharing a common parent
@@ -37,7 +36,7 @@ module I18n::Tasks::Data::Tree
     # @param to_pattern [Regexp]
     # @param root [Boolean]
     # @return {old key => new key}
-    def mv_key!(from_pattern, to_pattern, root: false) # rubocop:disable Metrics/AbcSize,Metrics/MethodLength
+    def mv_key!(from_pattern, to_pattern, root: false, retain: false) # rubocop:disable Metrics/AbcSize,Metrics/MethodLength
       moved_forest = Siblings.new
       moved_nodes = []
       old_key_to_new_key = {}
@@ -50,7 +49,7 @@ module I18n::Tasks::Data::Tree
             next
           end
           match = $~
-          new_key = to_pattern.gsub(/\\\d+/) { |m| match[m[1..-1].to_i] }
+          new_key = to_pattern.gsub(/\\\d+/) { |m| match[m[1..].to_i] }
           old_key_to_new_key[full_key] = new_key
           moved_forest.merge!(Siblings.new.tap do |forest|
             forest[[(node.root.try(:key) unless root), new_key].compact.join('.')] =
@@ -70,7 +69,7 @@ module I18n::Tasks::Data::Tree
           node.value = new_target.to_sym
         end
       end
-      remove_nodes_and_emptied_ancestors! moved_nodes
+      remove_nodes_and_emptied_ancestors!(moved_nodes) unless retain
       merge! moved_forest
       old_key_to_new_key
     end

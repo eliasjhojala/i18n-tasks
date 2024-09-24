@@ -16,27 +16,26 @@ en:
           data_format: 'Data format: %{valid_text}.'
           keep_order: Keep the order of the keys
           key_pattern: Filter by key pattern (e.g. 'common.*')
-          key_pattern_to_rename: Full key (pattern) to rename. Required
           locale: :i18n_tasks.common.locale
           locale_to_translate_from: Locale to translate from
           locales_filter: 'Locale(s) to process. Special: base'
           missing_types: 'Filter by types: %{valid}'
-          new_key_name: New name, interpolates original name as %{key}. Required
           nostdin: Do not read from stdin
           out_format: 'Output format: %{valid_text}'
           pattern_router: 'Use pattern router: keys moved per config data.write'
           strict: >-
             Avoid inferring dynamic key usages such as t("cats.#{cat}.name"). Takes precedence over
             the config setting if set.
-          translation_backend: Translation backend (google or deepl)
+          translation_backend: Translation backend [google, deepl, yandex, openai])
           value: >-
-            Value. Interpolates: %{value}, %{human_key}, %{key}, %{default}, %{value_or_human_key},
-            %{value_or_default_or_human_key}
+            Value. Interpolates: %%{value}, %%{human_key}, %%{key}, %%{default}, %%{value_or_human_key},
+            %%{value_or_default_or_human_key}
       desc:
-        add_missing: add missing keys to locale data
+        add_missing: add missing keys to locale data, optionally match a pattern
         check_consistent_interpolations: verify that all translations use correct interpolation variables
         check_normalized: verify that all translation data is normalized
         config: display i18n-tasks configuration
+        cp: copy the keys in locale data that match the given pattern
         data: show locale data
         data_merge: merge locale data with trees
         data_remove: remove keys present in tree from data
@@ -46,12 +45,13 @@ en:
         gem_path: show path to the gem
         health: is everything OK?
         irb: start REPL session within i18n-tasks context
-        missing: show missing translations
+        missing: show missing translations, optionally match a pattern
         mv: rename/merge the keys in locale data that match the given pattern
         normalize: 'normalize translation data: sort and move to the right files'
         remove_unused: remove unused keys
         rm: remove the keys in locale data that match the given pattern
-        translate_missing: translate missing keys with Google Translate or DeepL Pro
+        translate_missing: translate missing keys with Google Translate or DeepL Pro, optionally match
+          a pattern
         tree_convert: convert tree between formats
         tree_filter: filter tree by key pattern
         tree_merge: merge trees
@@ -69,6 +69,7 @@ en:
       enum_opt:
         invalid: "%{invalid} is not one of: %{valid}."
       errors:
+        invalid_backend: 'Invalid backend: %{invalid}. Must be one of %{valid}.'
         invalid_format: 'invalid format: %{invalid}. valid: %{valid}.'
         invalid_locale: 'invalid locale: %{invalid}'
         invalid_missing_type:
@@ -95,6 +96,8 @@ en:
           Setup DeepL Pro API key via DEEPL_AUTH_KEY environment variable or translation.deepl_api_key
           in config/i18n-tasks.yml. Get the key at https://www.deepl.com/pro.
         no_results: DeepL returned no results.
+        specific_target_missing: You must supply a specific variant for the given target language
+          e.g. en-us instead of en.
     google_translate:
       errors:
         no_api_key: >-
@@ -109,6 +112,12 @@ en:
     missing:
       details_title: Value in other locales or source
       none: No translations are missing.
+    openai_translate:
+      errors:
+        no_api_key: >-
+          Set OpenAI API key via OPENAI_API_KEY environment variable or translation.openai_api_key
+          in config/i18n-tasks.yml. Get the key at https://openai.com/.
+        no_results: OpenAI returned no results.
     remove_unused:
       confirm:
         one: "%{count} translation will be removed from %{locales}."

@@ -9,6 +9,116 @@ RSpec.describe 'i18n-tasks' do
   delegate :run_cmd, :run_cmd_capture_stdout_and_result, :run_cmd_capture_stderr, :i18n_task, :in_test_app_dir,
            to: :TestCodebase
 
+  # --- setup ---
+  bench_keys_count = ENV['BENCH_KEYS'].to_i
+
+  after do
+    TestCodebase.teardown
+  end
+
+  before do
+    gen_data = lambda do |v|
+      v_num = v.chars.map(&:ord).join.to_i
+      {
+        'ca' => { 'a' => v, 'b' => v, 'c' => v, 'd' => v, 'e' => "#{v}%{i}", 'f' => "#{v}%{i}" },
+        'cb' => { 'a' => v, 'b' => "#{v}%{i}" },
+        'hash' => {
+          'pattern' => { 'a' => v },
+          'pattern2' => { 'a' => v },
+          'pattern3' => { 'x' => { 'y' => { 'z' => v } } }
+        },
+        'unused' => { 'a' => v, 'numeric' => v_num, 'plural' => { 'one' => v, 'other' => v } },
+        'ignore_unused' => { 'a' => v },
+        'missing_in_es' => { 'a' => v },
+        'missing_in_es_plural_1' => { 'a' => { 'one' => v, 'other' => v } },
+        'missing_in_es_plural_2' => { 'a' => { 'one' => v, 'other' => v } },
+        'same_in_es' => { 'a' => v },
+        'ignore_eq_base_all' => { 'a' => v },
+        'ignore_eq_base_es' => { 'a' => v },
+        'blank_in_es' => { 'a' => v },
+        'relative' => {
+          'index' => {
+            'title' => v,
+            'description' => v,
+            'summary' => v
+          }
+        },
+        'emoji' => { 'smile' => '😀' },
+        'array' => { 'with_nil' => [nil, "foo #{v}", "bar #{v}"] },
+        'numeric' => { 'a' => v_num },
+        'plural' => { 'a' => { 'one' => v, 'other' => "%{count} #{v}s" } },
+        'scoped' => { 'x' => v },
+        'very' => { 'scoped' => { 'x' => v } },
+        'used' => { 'a' => v },
+        'latin_extra' => { 'çüéö' => v },
+        'not_a_comment' => v,
+        'reference-ok-plain' => :'resolved_reference_target.a',
+        'reference-ok-nested' => :resolved_reference_target,
+        'reference-unused' => :'resolved_reference_target.a',
+        'reference-unused-target' => :'unused.a',
+        'reference-missing-target' => :missing_target,
+        'resolved_reference_target' => { 'a' => v }
+      }.tap do |r|
+        if bench_keys_count > 0
+          gen = r['bench'] = {}
+          bench_keys_count.times { |i| gen["key#{i}"] = v }
+        end
+      end
+    end
+
+    en_data = gen_data.call('EN_TEXT')
+    es_data = gen_data.call('ES_TEXT').except('missing_in_es', 'missing_in_es_plural_1', 'missing_in_es_plural_2')
+
+    # nil keys cannot be used, but the user might put them in by mistake
+    # We should issue a warning and not blow up
+    en_data[nil] = 'a warning is expected'
+
+    es_data['same_in_es']['a']          = 'EN_TEXT'
+    es_data['blank_in_es']['a']         = ''
+    es_data['ignore_eq_base_all']['a']  = 'EN_TEXT'
+    es_data['ignore_eq_base_es']['a']   = 'EN_TEXT'
+    es_data['only_in_es']               = 1
+    es_data['emoji']['smile']           = '😄'
+    es_data['present_in_es_but_not_en'] = { 'a' => 'ES_TEXT' }
+
+    fs = fixtures_contents.merge(
+      'config/locales/en.yml' => { 'en' => en_data }.to_yaml,
+      'config/locales/es.yml' => { 'es' => es_data }.to_yaml,
+      'config/locales/external/en.yml' =>
+          { 'en' => {
+            'external' => {
+              'used' => 'EN_TEXT', 'unused' => 'EN_TEXT', 'missing_in_es' => 'EN_TEXT'
+            }
+          } }.to_yaml,
+      'config/locales/external/es.yml' =>
+          { 'es' => { 'external' => { 'used' => 'ES_TEXT', 'unused' => 'ES_TEXT' } } }.to_yaml,
+      'config/locales/old_devise.en.yml' => { 'en' => { 'devise' => { 'a' => 'EN_TEXT' } } }.to_yaml,
+      'config/locales/old_devise.es.yml' => { 'es' => { 'devise' => { 'a' => 'ES_TEXT' } } }.to_yaml,
+      'config/locales/unused.en.yml' => { 'en' => { 'unused' => { 'file' => 'EN_TEXT' } } }.to_yaml,
+      'config/locales/unused.es.yml' => { 'es' => { 'unused' => { 'file' => 'ES_TEXT' } } }.to_yaml,
+      'config/locales/not-in-write/unused.en.yml' =>
+          { 'en' => { 'unused' => { 'not-in-write' => 'EN_TEXT' } } }.to_yaml,
+      'config/locales/not-in-write/unused.es.yml' =>
+          { 'es' => { 'unused' => { 'not-in-write' => 'ES_TEXT' } } }.to_yaml,
+      # test that our algorithms can scale to the order of {bench_keys_count} keys.
+      'vendor/heavy.file' => Array.new(bench_keys_count) { |i| "t('bench.key#{i}') " }.join
+    )
+
+    TestCodebase.setup fs
+  end
+
+  let(:expected_unused_keys_strict) do
+    expected_unused_keys + %w[hash.pattern.a hash.pattern2.a hash.pattern3.x.y.z].map do |k|
+      %w[en es].map { |l| "#{l}.#{k}" }
+    end.reduce(:+)
+  end
+  let(:expected_unused_keys) do
+    %w[unused.a unused.file unused.not-in-write unused.numeric unused.plural reference-unused
+       reference-unused-target].map do |k|
+      %w[en es].map { |l| "#{l}.#{k}" }
+    end.reduce(:+)
+  end
+
   describe 'bin/i18n-tasks' do
     it 'shows help when invoked with no arguments, shows version on --version' do
       skip "Doesn't work jruby and rbx due to Open3 issues" if RUBY_ENGINE == 'jruby' || RUBY_ENGINE == 'rbx'
@@ -79,9 +189,11 @@ RSpec.describe 'i18n-tasks' do
         index.my_custom_scanner.title
         magic_comment
         default_arg
+        default_plural_arg
         .not_relative
         scope.subscope.a.b
         scope.key_in_erb
+        hello.world.from_javascript
         scope.relative.index.title
         reference-missing-target.a
         nested.parent.rb
@@ -98,6 +210,7 @@ RSpec.describe 'i18n-tasks' do
         es.external.missing_in_es
       ]
     end
+
     it 'detects missing' do
       es_keys = expected_missing_keys_diff.grep(/^es\./) +
                 (expected_missing_keys_in_source.map { |k| k[0] == '⮕' ? k : "es.#{k}" })
@@ -116,19 +229,6 @@ RSpec.describe 'i18n-tasks' do
     end
   end
 
-  let(:expected_unused_keys) do
-    %w[unused.a unused.file unused.not-in-write unused.numeric unused.plural reference-unused
-       reference-unused-target].map do |k|
-      %w[en es].map { |l| "#{l}.#{k}" }
-    end.reduce(:+)
-  end
-
-  let(:expected_unused_keys_strict) do
-    expected_unused_keys + %w[hash.pattern.a hash.pattern2.a hash.pattern3.x.y.z].map do |k|
-      %w[en es].map { |l| "#{l}.#{k}" }
-    end.reduce(:+)
-  end
-
   describe 'unused' do
     it 'detects unused (--no-strict)' do
       out, result = run_cmd_capture_stdout_and_result('unused', '--no-strict')
@@ -145,7 +245,7 @@ RSpec.describe 'i18n-tasks' do
     it 'removes unused' do
       in_test_app_dir do
         t      = i18n_task
-        unused = expected_unused_keys.map { |k| ::I18n::Tasks::SplitKey.split_key(k, 2)[1] }
+        unused = expected_unused_keys.map { |k| I18n::Tasks::SplitKey.split_key(k, 2)[1] }
         unused.each do |key|
           expect(t.key_value?(key, :en)).to be true
           expect(t.key_value?(key, :es)).to be true
@@ -180,7 +280,7 @@ RSpec.describe 'i18n-tasks' do
     it 'removes unused (--keep-order)' do
       in_test_app_dir do
         t      = i18n_task
-        unused = expected_unused_keys.map { |k| ::I18n::Tasks::SplitKey.split_key(k, 2)[1] }
+        unused = expected_unused_keys.map { |k| I18n::Tasks::SplitKey.split_key(k, 2)[1] }
         unused.each do |key|
           expect(t.key_value?(key, :en)).to be true
           expect(t.key_value?(key, :es)).to be true
@@ -198,7 +298,7 @@ RSpec.describe 'i18n-tasks' do
 
     it 'does not sort the keys (--keep-order)' do
       in_test_app_dir do
-        unused_keys = expected_unused_keys.map { |k| ::I18n::Tasks::SplitKey.split_key(k, 2)[1] }
+        unused_keys = expected_unused_keys.map { |k| I18n::Tasks::SplitKey.split_key(k, 2)[1] }
         initial_keys = i18n_task.data['en'].select_keys do |k, _node|
           unused_keys.none? { |unused_key| k.include?(unused_key) }
         end
@@ -231,11 +331,42 @@ RSpec.describe 'i18n-tasks' do
 
     it 'moves keys to the corresponding files as per data.write' do
       in_test_app_dir do
-        expect(File).to_not exist 'config/locales/devise.en.yml'
+        expect(File).not_to exist 'config/locales/devise.en.yml'
         run_cmd 'normalize', '--pattern_router'
         expect(YAML.load_file('config/locales/devise.en.yml')['en']['devise']['a']).to eq 'EN_TEXT'
         # Old value should be removed
         expect(File).not_to exist 'config/locales/old_devise.en.yml'
+      end
+    end
+
+    it 'does not remove emojis' do
+      in_test_app_dir do
+        run_cmd 'normalize'
+        en_yml_data = i18n_task.data.reload['en'].select_keys do |_k, node|
+          node.data[:path] == 'config/locales/en.yml'
+        end
+
+        expect(en_yml_data[:en][:emoji][:smile].value).to eq('😀')
+      end
+    end
+
+    it 'strips trailing space left by older libyaml' do
+      in_test_app_dir do
+        run_cmd 'normalize'
+
+        result = File.readlines('config/locales/es.yml')[1..6].join
+
+        aggregate_failures do
+          expect(result).to match(/  -$/)
+          expect(result).to eq <<~YAML
+            es:
+              array:
+                with_nil:
+                -
+                - foo ES_TEXT
+                - bar ES_TEXT
+          YAML
+        end
       end
     end
   end
@@ -251,6 +382,8 @@ RSpec.describe 'i18n-tasks' do
         expect(YAML.load_file('config/locales/en.yml')['en']['used_but_missing']['key']).to eq 'Key'
         expect(YAML.load_file('config/locales/en.yml')['en']['present_in_es_but_not_en']['a']).to eq 'ES_TEXT'
         expect(YAML.load_file('config/locales/en.yml')['en']['default_arg']).to eq 'Default Text'
+        expect(YAML.load_file('config/locales/en.yml')['en']['default_plural_arg']).to eq({ 'one' => 'One Text',
+                                                                                            'other' => 'Other Text' })
       end
     end
 
@@ -340,99 +473,5 @@ RSpec.describe 'i18n-tasks' do
           app/views/index.html.slim:35 = t 'reference-ok-nested.a'
       TXT
     end
-  end
-
-  # --- setup ---
-  bench_keys_count = ENV['BENCH_KEYS'].to_i
-  before(:each) do
-    gen_data = lambda do |v|
-      v_num = v.chars.map(&:ord).join.to_i
-      {
-        'ca' => { 'a' => v, 'b' => v, 'c' => v, 'd' => v, 'e' => "#{v}%{i}", 'f' => "#{v}%{i}" },
-        'cb' => { 'a' => v, 'b' => "#{v}%{i}" },
-        'hash' => {
-          'pattern' => { 'a' => v },
-          'pattern2' => { 'a' => v },
-          'pattern3' => { 'x' => { 'y' => { 'z' => v } } }
-        },
-        'unused' => { 'a' => v, 'numeric' => v_num, 'plural' => { 'one' => v, 'other' => v } },
-        'ignore_unused' => { 'a' => v },
-        'missing_in_es' => { 'a' => v },
-        'missing_in_es_plural_1' => { 'a' => { 'one' => v, 'other' => v } },
-        'missing_in_es_plural_2' => { 'a' => { 'one' => v, 'other' => v } },
-        'same_in_es' => { 'a' => v },
-        'ignore_eq_base_all' => { 'a' => v },
-        'ignore_eq_base_es' => { 'a' => v },
-        'blank_in_es' => { 'a' => v },
-        'relative' => {
-          'index' => {
-            'title' => v,
-            'description' => v,
-            'summary' => v
-          }
-        },
-        'numeric' => { 'a' => v_num },
-        'plural' => { 'a' => { 'one' => v, 'other' => "%{count} #{v}s" } },
-        'scoped' => { 'x' => v },
-        'very' => { 'scoped' => { 'x' => v } },
-        'used' => { 'a' => v },
-        'latin_extra' => { 'çüéö' => v },
-        'not_a_comment' => v,
-        'reference-ok-plain' => :'resolved_reference_target.a',
-        'reference-ok-nested' => :resolved_reference_target,
-        'reference-unused' => :'resolved_reference_target.a',
-        'reference-unused-target' => :'unused.a',
-        'reference-missing-target' => :missing_target,
-        'resolved_reference_target' => { 'a' => v }
-      }.tap do |r|
-        if bench_keys_count > 0
-          gen = r['bench'] = {}
-          bench_keys_count.times { |i| gen["key#{i}"] = v }
-        end
-      end
-    end
-
-    en_data = gen_data.call('EN_TEXT')
-    es_data = gen_data.call('ES_TEXT').except('missing_in_es', 'missing_in_es_plural_1', 'missing_in_es_plural_2')
-
-    # nil keys cannot be used, but the user might put them in by mistake
-    # We should issue a warning and not blow up
-    en_data[nil] = 'a warning is expected'
-
-    es_data['same_in_es']['a']          = 'EN_TEXT'
-    es_data['blank_in_es']['a']         = ''
-    es_data['ignore_eq_base_all']['a']  = 'EN_TEXT'
-    es_data['ignore_eq_base_es']['a']   = 'EN_TEXT'
-    es_data['only_in_es']               = 1
-    es_data['present_in_es_but_not_en'] = { 'a' => 'ES_TEXT' }
-
-    fs = fixtures_contents.merge(
-      'config/locales/en.yml' => { 'en' => en_data }.to_yaml,
-      'config/locales/es.yml' => { 'es' => es_data }.to_yaml,
-      'config/locales/external/en.yml' =>
-          { 'en' => {
-            'external' => {
-              'used' => 'EN_TEXT', 'unused' => 'EN_TEXT', 'missing_in_es' => 'EN_TEXT'
-            }
-          } }.to_yaml,
-      'config/locales/external/es.yml' =>
-          { 'es' => { 'external' => { 'used' => 'ES_TEXT', 'unused' => 'ES_TEXT' } } }.to_yaml,
-      'config/locales/old_devise.en.yml' => { 'en' => { 'devise' => { 'a' => 'EN_TEXT' } } }.to_yaml,
-      'config/locales/old_devise.es.yml' => { 'es' => { 'devise' => { 'a' => 'ES_TEXT' } } }.to_yaml,
-      'config/locales/unused.en.yml' => { 'en' => { 'unused' => { 'file' => 'EN_TEXT' } } }.to_yaml,
-      'config/locales/unused.es.yml' => { 'es' => { 'unused' => { 'file' => 'ES_TEXT' } } }.to_yaml,
-      'config/locales/not-in-write/unused.en.yml' =>
-          { 'en' => { 'unused' => { 'not-in-write' => 'EN_TEXT' } } }.to_yaml,
-      'config/locales/not-in-write/unused.es.yml' =>
-          { 'es' => { 'unused' => { 'not-in-write' => 'ES_TEXT' } } }.to_yaml,
-      # test that our algorithms can scale to the order of {bench_keys_count} keys.
-      'vendor/heavy.file' => Array.new(bench_keys_count) { |i| "t('bench.key#{i}') " }.join
-    )
-
-    TestCodebase.setup fs
-  end
-
-  after do
-    TestCodebase.teardown
   end
 end

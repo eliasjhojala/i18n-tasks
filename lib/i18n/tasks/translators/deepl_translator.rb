@@ -4,6 +4,11 @@ require 'i18n/tasks/translators/base_translator'
 
 module I18n::Tasks::Translators
   class DeeplTranslator < BaseTranslator
+    # max allowed texts per request
+    BATCH_SIZE = 50
+    # those languages must be specified with their sub-kind e.g en-us
+    SPECIFIC_TARGETS = %w[en pt].freeze
+
     def initialize(*)
       begin
         require 'deepl'
@@ -17,16 +22,27 @@ module I18n::Tasks::Translators
     protected
 
     def translate_values(list, from:, to:, **options)
-      result = DeepL.translate(list, to_deepl_compatible_locale(from), to_deepl_compatible_locale(to), options)
-      if result.is_a?(DeepL::Resources::Text)
-        [result.text]
-      else
-        result.map(&:text)
+      results = []
+      list.each_slice(BATCH_SIZE) do |parts|
+        res = DeepL.translate(
+          parts,
+          to_deepl_source_locale(from),
+          to_deepl_target_locale(to),
+          options_with_glossary(options, from, to)
+        )
+        if res.is_a?(DeepL::Resources::Text)
+          results << res.text
+        else
+          results += res.map(&:text)
+        end
       end
+      results
     end
 
     def options_for_translate_values(**options)
-      { ignore_tags: %w[i18n] }.merge(options)
+      extra_options = @i18n_tasks.translation_config[:deepl_options]&.symbolize_keys || {}
+
+      extra_options.merge({ ignore_tags: %w[i18n] }).merge(options)
     end
 
     def options_for_html
@@ -34,7 +50,7 @@ module I18n::Tasks::Translators
     end
 
     def options_for_plain
-      { preserve_formatting: true }
+      { preserve_formatting: true, tag_handling: 'xml', html_escape: true }
     end
 
     # @param [String] value
@@ -60,9 +76,21 @@ module I18n::Tasks::Translators
 
     private
 
-    # Convert 'es-ES' to 'ES'
-    def to_deepl_compatible_locale(locale)
+    # Convert 'es-ES' to 'ES', en-us to EN
+    def to_deepl_source_locale(locale)
       locale.to_s.split('-', 2).first.upcase
+    end
+
+    # Convert 'es-ES' to 'ES' but warn about locales requiring a specific variant
+    def to_deepl_target_locale(locale)
+      loc, sub = locale.to_s.split('-')
+      if SPECIFIC_TARGETS.include?(loc)
+        # Must see how the deepl api evolves, so this could be an error in the future
+        warn_deprecated I18n.t('i18n_tasks.deepl_translate.errors.specific_target_missing') unless sub
+        locale.to_s.upcase
+      else
+        loc.upcase
+      end
     end
 
     def configure_api_key!
@@ -71,11 +99,32 @@ module I18n::Tasks::Translators
       version = @i18n_tasks.translation_config[:deepl_version]
       fail ::I18n::Tasks::CommandError, I18n.t('i18n_tasks.deepl_translate.errors.no_api_key') if api_key.blank?
 
-      DeepL.configure { |config|
+      DeepL.configure do |config|
         config.auth_key = api_key
         config.host = host unless host.blank?
         config.version = version unless version.blank?
-      }
+      end
+    end
+
+    def options_with_glossary(options, from, to)
+      glossary = find_glossary(from, to)
+      glossary ? { glossary_id: glossary.id }.merge(options) : options
+    end
+
+    def all_ready_glossaries
+      @all_ready_glossaries ||= DeepL.glossaries.list
+    end
+
+    def find_glossary(from, to)
+      config_glossary_ids = @i18n_tasks.translation_config[:deepl_glossary_ids]
+      return unless config_glossary_ids
+
+      all_ready_glossaries.find do |glossary|
+        glossary.ready \
+          && glossary.source_lang == from \
+          && glossary.target_lang == to \
+          && config_glossary_ids.include?(glossary.id)
+      end
     end
   end
 end

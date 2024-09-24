@@ -12,7 +12,7 @@ module I18n::Tasks::Scanners
     include OccurrenceFromPosition
     include RubyKeyLiterals
 
-    TRANSLATE_CALL_RE = /(?<=^|[^\w'\-.]|[^\w'\-]I18n\.|I18n\.)t(?:!|ranslate!?)?/.freeze
+    TRANSLATE_CALL_RE = /(?<=^|[^\p{L}_'\-.]|[^\p{L}'-]I18n\.|I18n\.)t(?:!|ranslate!?)?/.freeze
     IGNORE_LINES = {
       'coffee' => /^\s*#(?!\si18n-tasks-use)/,
       'erb' => /^\s*<%\s*#(?!\si18n-tasks-use)/,
@@ -66,7 +66,7 @@ module I18n::Tasks::Scanners
     end
 
     def exclude_line?(line, path)
-      re = @ignore_lines_res[File.extname(path)[1..-1]]
+      re = @ignore_lines_res[File.extname(path)[1..]]
       re && re =~ line
     end
 

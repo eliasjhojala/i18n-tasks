@@ -11,22 +11,27 @@ RSpec.describe 'File system i18n' do
         'config/locales/other.fr.yml' => { fr: {} }
       )
     end
+
     after do
       TestCodebase.teardown
     end
+
     let(:data) { I18n::Tasks::Data::FileSystem.new }
+
     it 'default pattern' do
       data.config = { read: ['config/locales/%{locale}.yml'] }
       TestCodebase.in_test_app_dir do
         expect(data.available_locales.sort).to eq(%w[en es].sort)
       end
     end
+
     it 'more inclusive pattern' do
       data.config = { read: ['config/locales/*%{locale}.yml'] }
       TestCodebase.in_test_app_dir do
         expect(data.available_locales.sort).to eq(%w[en es fr].sort)
       end
     end
+
     it 'another pattern' do
       data.config = { read: ['config/locales/*.%{locale}.yml'] }
       TestCodebase.in_test_app_dir do
@@ -37,6 +42,7 @@ RSpec.describe 'File system i18n' do
 
   describe '#get' do
     let(:data) { I18n::Tasks::Data::FileSystem.new }
+
     after { TestCodebase.teardown }
 
     it 'includes problematic YAML file path in exception message' do
@@ -64,6 +70,7 @@ RSpec.describe 'File system i18n' do
 
   describe 'yml' do
     let(:data) { I18n::Tasks::Data::FileSystem.new }
+
     after { TestCodebase.teardown }
 
     it '#get' do
@@ -106,6 +113,7 @@ RSpec.describe 'File system i18n' do
         write: ['config/locales/%{locale}.json']
       )
     end
+
     after { TestCodebase.teardown }
 
     it 'reads' do

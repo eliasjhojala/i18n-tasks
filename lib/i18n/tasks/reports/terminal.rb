@@ -93,6 +93,12 @@ module I18n
           end
         end
 
+        def cp_results(results)
+          results.each do |(from, to)|
+            print_info "#{Rainbow(from).cyan} #{Rainbow('+').yellow.bright} #{Rainbow(to).green}"
+          end
+        end
+
         def check_normalized_results(non_normalized)
           if non_normalized.empty?
             print_success 'All data is normalized'
@@ -112,7 +118,7 @@ module I18n
           when :missing_plural
             leaf[:data][:missing_keys].join(', ')
           else
-            "#{Rainbow(leaf[:data][:missing_diff_locale]).cyan} "\
+            "#{Rainbow(leaf[:data][:missing_diff_locale]).cyan} " \
             "#{format_value(leaf[:value].is_a?(String) ? leaf[:value].strip : leaf[:value])}"
           end
         end
@@ -121,9 +127,9 @@ module I18n
           if data[:ref_info]
             from, to = data[:ref_info]
             resolved = key[0...to.length]
-            after    = key[to.length..-1]
+            after    = key[to.length..]
             "  #{Rainbow(from).yellow}#{Rainbow(after).cyan}\n" \
-            "#{Rainbow('⮕').yellow.bright} #{Rainbow(resolved).yellow.bright}"
+              "#{Rainbow('⮕').yellow.bright} #{Rainbow(resolved).yellow.bright}"
           else
             Rainbow(key).cyan
           end

@@ -3,9 +3,9 @@
 require 'spec_helper'
 
 RSpec.describe 'LocalePathname' do
-  context '#replace_locale' do
+  describe '#replace_locale' do
     def replace_locale(path, from, to)
-      ::I18n::Tasks::LocalePathname.replace_locale(path, from, to)
+      I18n::Tasks::LocalePathname.replace_locale(path, from, to)
     end
 
     it 'es.yml' do

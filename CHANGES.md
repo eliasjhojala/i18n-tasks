@@ -1,7 +1,157 @@
+## Unreleased
+
+* Uses AST-parser for all ERB-files, not just `.html.erb`
+* [Fixed regex in `PatternScanner`] (https://github.com/glebm/i18n-tasks/issues/572)
+* Adds contextual parser to support more Rails-translations
+  [#565](https://github.com/glebm/i18n-tasks/pull/565)
+
+## v1.0.14
+
+* Newlines are now preserved when using Google Translate.
+  [#567](https://github.com/glebm/i18n-tasks/pull/567)
+* Improved locale name handling for Google Translate.
+  [#558](https://github.com/glebm/i18n-tasks/pull/558)
+* Fixes compatibility with some versions of the i18n gem.
+  [#553](https://github.com/glebm/i18n-tasks/pull/553)
+* Added `i18n-tasks cp` command.
+  [#551](https://github.com/glebm/i18n-tasks/pull/551)
+* Parentheses in keys are now supported.
+  [#550](https://github.com/glebm/i18n-tasks/pull/550)
+* Non-HTML ERB files are now supported.
+  [#545](https://github.com/glebm/i18n-tasks/pull/545)
+* Adds an optional isolating router that assumes each YAML file is independent.
+  [#541](https://github.com/glebm/i18n-tasks/pull/541)
+* Adds an optional AST matcher for Rails default_i18n_subject.
+  [#538](https://github.com/glebm/i18n-tasks/pull/538) [#539](https://github.com/glebm/i18n-tasks/pull/539)
+* Supports DeepL glossaries.
+  [#535](https://github.com/glebm/i18n-tasks/pull/535)
+* Supports hashes for DeepL and other translators.
+  [#531](https://github.com/glebm/i18n-tasks/pull/531)
+* Adds configuration for OpenAI prompt.
+  [#533](https://github.com/glebm/i18n-tasks/pull/533)
+* Adds configuration for OpenAI model.
+  [#532](https://github.com/glebm/i18n-tasks/pull/532) [#534](https://github.com/glebm/i18n-tasks/pull/534)
+
+## v1.0.13
+
+* OpenAI translator.
+  [#519](https://github.com/glebm/i18n-tasks/pull/519)
+* DeepL
+  * More robust interpolation handling.
+    [#523](https://github.com/glebm/i18n-tasks/pull/523)
+  * Configurable formality level.
+    [#477](https://github.com/glebm/i18n-tasks/pull/477)
+  * Send requests in batches.
+    [#474](https://github.com/glebm/i18n-tasks/pull/474)
+* Support partially dynamic segments in non-strict mode (e.g. `t "cats.#{cat}-bio.name"`).
+  [#509](https://github.com/glebm/i18n-tasks/pull/509)
+* Fixes `grep_keys` in Ruby 3+.
+  [#492](https://github.com/glebm/i18n-tasks/pull/492)
+* Improved handling of older libyaml versions.
+  [#493](https://github.com/glebm/i18n-tasks/pull/493)
+
+## v1.0.12
+
+* The heuristic for detecting non-plural keys that look like plural keys has been removed
+  because it was causing other issues. Please use `ignore_missing` to handle such keys.
+  [#461](https://github.com/glebm/i18n-tasks/issues/461)
+* Adds support for plural default values,
+  e.g. `t('test', default: { one: '1', other: '2' })`.
+  [#464](https://github.com/glebm/i18n-tasks/issues/464)
+* Adds the `-p` pattern option to the `missing`, `add-missing`, and `translate-missing` commands.
+  [#469](https://github.com/glebm/i18n-tasks/issues/469)
+* Relaxes version restriction for the `better_html` depedency to allow v2.x.
+  [#471](https://github.com/glebm/i18n-tasks/pull/471)
+* Support filenames where locale is separated by a `-`, e.g. `user-en.yml` instead of the usual `user.en.yml`.
+  [#467](https://github.com/glebm/i18n-tasks/pull/467)
+
+## v1.0.11
+
+* Fixes `--config` command line flag.
+  [#455](https://github.com/glebm/i18n-tasks/pull/455)
+
+* Fixes circular `require` warnings on Ruby 3.1.2.
+  [#457](https://github.com/glebm/i18n-tasks/pull/457)
+
+* `*.xlsx` files are now excluded by default.
+  [#458](https://github.com/glebm/i18n-tasks/pull/458)
+
+## v1.0.10
+
+* Fixes `relative_exclude_method_name_paths`.
+  Previously, the code used `exclude_method_name_paths` instead of `relative_exclude_method_name_paths`.
+  [#454](https://github.com/glebm/i18n-tasks/pull/454)
+
+## v1.0.9
+
+* Adds an optional AST matcher for Rails model translations, such as `human_attribute_name`.
+
+  Can be enabled by adding the following to the config:
+
+  ```erb
+  <% I18n::Tasks.add_ast_matcher('I18n::Tasks::Scanners::AstMatchers::RailsModelMatcher') %>
+  ```
+
+  [#433](https://github.com/glebm/i18n-tasks/pull/433)
+
+## v1.0.8
+
+* Fixes a crash in `strict: false` mode.
+  [#445](https://github.com/glebm/i18n-tasks/pull/445)
+
+## v1.0.7
+
+* Fixes an issue with `scope:` argument parsing.
+  [#442](https://github.com/glebm/i18n-tasks/pull/442)
+
+## v1.0.6
+
+* Fixes handling of more types of ERB comments.
+  [#437](https://github.com/glebm/i18n-tasks/pull/437)
+
+## v1.0.5
+
+* Fixes handling of multiline ERB comments.
+  [#431](https://github.com/glebm/i18n-tasks/issues/431)
+
+## v1.0.4
+
+* Fixes handling of ERB comments without a space between `%` and `#` (`<%# ... %>`).
+  [#429](https://github.com/glebm/i18n-tasks/pull/429)
+* Better support for the `it` gem.
+  [#361](https://github.com/glebm/i18n-tasks/issues/361)
+
+## v1.0.3
+
+* Fixes inline block handling in ERB files.
+  [#427](https://github.com/glebm/i18n-tasks/pull/427)
+
+## v1.0.2
+
+* Fixes block call handling in ERB files.
+  [#425](https://github.com/glebm/i18n-tasks/pull/425)
+
+## v1.0.1
+
+* Fixes `better_html` scanning the project.
+  [#422](https://github.com/glebm/i18n-tasks/issues/422)
+
+## v1.0.0
+
+* Log [#StandWithUkraine](https://stand-with-ukraine.pp.ua/) to stderr on every CLI command.
+* Improved ERB parsing: Replaces a regexp-based parser with an AST parser.
+  [#416](https://github.com/glebm/i18n-tasks/pull/416)
+* Fixes compatibility with Psych 4.0+ and Ruby 3.1.
+  [#415](https://github.com/glebm/i18n-tasks/pull/415)
+* Works around an emoji handling bug in libyaml.
+  [#421](https://github.com/glebm/i18n-tasks/pull/421)
+
 ## v0.9.37
 
 * Reverted `"#{hash["key"]}"` pattern scanner support because it caused a number of issues.
   [#410](https://github.com/glebm/i18n-tasks/pull/410)
+* Drops support for Ruby < 2.6.
+  [#2552cdb3](https://github.com/glebm/i18n-tasks/commit/2552cdb36a94a801e64d6b71279353dbbedb1618)
 
 ## v0.9.36
 
@@ -37,6 +187,8 @@
 
 * Fixes Ruby 3.0 compatibility.
   [#370](https://github.com/glebm/i18n-tasks/issues/370)
+* Drops support for Ruby < 2.5.
+  [#e71a3bf](https://github.com/glebm/i18n-tasks/commit/e71a3bf37e46606aaaea1df81108f8e43aa4a5a1)
 
 ## v0.9.33
 

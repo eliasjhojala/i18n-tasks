@@ -10,7 +10,7 @@ module I18n
         # @param calling_method [#call, Symbol, String, false, nil]
         # @return [String] absolute version of the key
         def absolute_key(key, path, roots: config[:relative_roots],
-                         exclude_method_name_paths: config[:exclude_method_name_paths],
+                         exclude_method_name_paths: config[:relative_exclude_method_name_paths],
                          calling_method: nil)
           return key unless key.start_with?(DOT)
           fail 'roots argument is required' unless roots.present?
@@ -18,7 +18,7 @@ module I18n
           normalized_path = File.expand_path(path)
           (root = path_root(normalized_path, roots)) ||
             fail(CommandError, "Cannot resolve relative key \"#{key}\".\n" \
-                                "Set search.relative_roots in config/i18n-tasks.yml (currently #{roots.inspect})")
+                               "Set search.relative_roots in config/i18n-tasks.yml (currently #{roots.inspect})")
           normalized_path.sub!(root, '')
 
           if (exclude_method_name_paths || []).map { |p| expand_path(p) }.include?(root)
@@ -61,7 +61,7 @@ module I18n
             "#{file_key.sub(/_controller$/, '')}.#{calling_method}"
           else
             # Remove _ prefix from partials
-            file_key.gsub(/\._/, DOT)
+            file_key.gsub('._', DOT)
           end
         end
       end

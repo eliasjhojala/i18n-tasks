@@ -5,7 +5,8 @@ module I18n::Tasks::Configuration # rubocop:disable Metrics/ModuleLength
     base_locale: 'en',
     internal_locale: 'en',
     search: ::I18n::Tasks::UsedKeys::SEARCH_DEFAULTS,
-    data: ::I18n::Tasks::Data::DATA_DEFAULTS
+    data: ::I18n::Tasks::Data::DATA_DEFAULTS,
+    translation_backend: :google
   }.freeze
 
   # i18n-tasks config (defaults + config/i18n-tasks.yml)
@@ -30,6 +31,13 @@ module I18n::Tasks::Configuration # rubocop:disable Metrics/ModuleLength
           warn_deprecated 'Please move relative_roots under search in config/i18n-tasks.yml.'
           c[:search][:relative_roots] = c.delete(:relative_roots)
         end
+
+        if c.dig(:search, :exclude_method_name_paths)
+          warn_deprecated(
+            'Please rename exclude_method_name_paths to relative_exclude_method_name_paths in config/i18n-tasks.yml.'
+          )
+          c[:search][:relative_exclude_method_name_paths] = c[:search].delete(:exclude_method_name_paths)
+        end
       end
     else
       {}.with_indifferent_access
@@ -44,23 +52,24 @@ module I18n::Tasks::Configuration # rubocop:disable Metrics/ModuleLength
   # data config
   #  @return [Hash<adapter: String, options: Hash>]
   def data_config
-    @config_sections[:data] ||= begin
-      {
-        adapter: data.class.name,
-        config: data.config
-      }
-    end
+    @config_sections[:data] ||= {
+      adapter: data.class.name,
+      config: data.config
+    }
   end
 
   # translation config
   # @return [Hash{String => String,Hash,Array}]
-  def translation_config
+  def translation_config # rubocop:disable Metrics/AbcSize
     @config_sections[:translation] ||= begin
       conf = (config[:translation] || {}).with_indifferent_access
+      conf[:backend] ||= DEFAULTS[:translation_backend]
       conf[:google_translate_api_key] = ENV['GOOGLE_TRANSLATE_API_KEY'] if ENV.key?('GOOGLE_TRANSLATE_API_KEY')
       conf[:deepl_api_key] = ENV['DEEPL_AUTH_KEY'] if ENV.key?('DEEPL_AUTH_KEY')
       conf[:deepl_host] = ENV['DEEPL_HOST'] if ENV.key?('DEEPL_HOST')
       conf[:deepl_version] = ENV['DEEPL_VERSION'] if ENV.key?('DEEPL_VERSION')
+      conf[:openai_api_key] = ENV['OPENAI_API_KEY'] if ENV.key?('OPENAI_API_KEY')
+      conf[:openai_model] = ENV['OPENAI_MODEL'] if ENV.key?('OPENAI_MODEL')
       conf[:yandex_api_key] = ENV['YANDEX_API_KEY'] if ENV.key?('YANDEX_API_KEY')
       conf
     end
@@ -82,7 +91,7 @@ module I18n::Tasks::Configuration # rubocop:disable Metrics/ModuleLength
       valid_locales = Dir[File.join(I18n::Tasks.gem_path, 'config', 'locales', '*.yml')]
                       .map { |f| File.basename(f, '.yml') }
       unless valid_locales.include?(internal_locale)
-        log_warn "invalid internal_locale #{internal_locale.inspect}. "\
+        log_warn "invalid internal_locale #{internal_locale.inspect}. " \
                  "Available internal locales: #{valid_locales * ', '}."
         internal_locale = DEFAULTS[:internal_locale].to_s
       end

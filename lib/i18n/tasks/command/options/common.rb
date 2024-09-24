@@ -26,13 +26,12 @@ module I18n::Tasks
         arg :value,
             '-v',
             '--value VALUE',
-            t('i18n_tasks.cmd.args.desc.value')
+            t('i18n_tasks.cmd.args.desc.value', dummy: 'value') # Dummy value is workaround for https://github.com/ruby-i18n/i18n/issues/689
 
         arg :config,
             '-c',
             '--config FILE',
             t('i18n_tasks.cmd.args.desc.config')
-
 
         def arg_or_pos!(key, opts)
           opts[key] ||= opts[:arguments].try(:shift)

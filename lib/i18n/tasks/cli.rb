@@ -35,13 +35,14 @@ class I18n::Tasks::CLI
 
   def run(argv)
     argv.each_with_index do |arg, i|
-      if ["--config", "-c"].include?(arg)
-        if File.exist?(argv[i+1])
-          @config_file = argv[i+1]
-          break
-        else
-          error "Config file doesn't exist: #{argv[i+1]}", 128
-        end
+      next unless ['--config', '-c'].include?(arg)
+
+      _, config_file = argv.slice!(i, 2)
+      if File.exist?(config_file)
+        @config_file = config_file
+        break
+      else
+        error "Config file doesn't exist: #{config_file}", 128
       end
     end
 

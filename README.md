@@ -1,5 +1,7 @@
 # i18n-tasks [![Build Status][badge-ci]][ci] [![Coverage Status][badge-coverage]][coverage] [![Gitter](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/glebm/i18n-tasks?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 
+[![Stand With Ukraine](https://raw.githubusercontent.com/vshymanskyy/StandWithUkraine/main/banner2-direct.svg)](https://stand-with-ukraine.pp.ua/)
+
 i18n-tasks helps you find and manage missing and unused translations.
 
 <img width="539" height="331" src="https://i.imgur.com/XZBd8l7.png">
@@ -22,7 +24,7 @@ i18n-tasks can be used with any project using the ruby [i18n gem][i18n-gem] (def
 Add i18n-tasks to the Gemfile:
 
 ```ruby
-gem 'i18n-tasks', '~> 0.9.37'
+gem 'i18n-tasks', '~> 1.0.14', group: :development
 ```
 
 Copy the default [configuration file](#configuration):
@@ -82,38 +84,22 @@ Usage: i18n-tasks add-missing [options] [locale ...]
     -h, --help     Display this help message.
 ```
 
-### Google Translate missing keys
+### Translate Missing Keys
 
-Translate missing values with Google Translate ([more below on the API key](#google-translation-config)).
+Translate missing keys using a backend service of your choice.
 
 ```console
 $ i18n-tasks translate-missing
 
-# accepts from and locales options:
-$ i18n-tasks translate-missing --from=base es fr
+# accepts backend, from and locales options
+$ i18n-tasks translate-missing --from=base es fr --backend=google
 ```
 
-### DeepL Pro Translate missing keys
-
-Translate missing values with DeepL Pro Translate ([more below on the API key](#deepl-translation-config)).
-
-```console
-$ i18n-tasks translate-missing --backend=deepl
-
-# accepts from and locales options:
-$ i18n-tasks translate-missing --backend=deepl --from=en fr nl
-```
-
-### Yandex Translate missing keys
-
-Translate missing values with Yandex Translate ([more below on the API key](#yandex-translation-config)).
-
-```console
-$ i18n-tasks translate-missing --backend=yandex
-
-# accepts from and locales options:
-$ i18n-tasks translate-missing --from=en es fr
-```
+Available backends:
+- `google` - [Google Translate](#google-translation-config)
+- `deepl` - [DeepL Pro](#deepl-translation-config)
+- `yandex` - [Yandex Translate](#yandex-translation-config)
+- `openai` - [OpenAI](#openai-translation-config)
 
 ### Find usages
 
@@ -221,7 +207,7 @@ See the full list of tasks with `i18n-tasks --help`.
 
 ### Features and limitations
 
-`i18n-tasks` uses an AST scanner for `.rb` files, and a regexp-based scanner for other files, such as `.haml`.
+`i18n-tasks` uses an AST scanner for `.rb` and `.html.erb` files, and a regexp-based scanner for other files, such as `.haml`.
 
 #### Relative keys
 
@@ -325,6 +311,33 @@ data:
 If you want to have i18n-tasks reorganize your existing keys using `data.write`, either set the router to
 `pattern_router` as above, or run `i18n-tasks normalize -p` (forcing the use of the pattern router for that run).
 
+##### Isolating router
+
+Isolating router assumes each YAML file is independent and can contain similar keys.
+
+As a result, the translations are written to an alternate target file for each source file
+(only the `%{locale}` part is changed to match target locale). Thus, it is not necessary to
+specify any `write` configuration (in fact, it would be completely ignored).
+
+This can be useful for example when using [ViewComponent sidecars](https://viewcomponent.org/guide/translations.html)
+(ViewComponent assigns an implicit scope to each sidecar YAML file but `i18n-tasks` is not aware of
+that logic, resulting in collisions):
+
+* `app/components/movies_component.en.yml`:
+   ```yaml
+   en:
+     title: Movies
+   ```
+
+* `app/components/games_component.en.yml`
+   ```yaml
+   en:
+     title: Games
+   ```
+
+This router has a limitation, though: it does not support detecting missing keys from code usage
+(since it is not aware of the implicit scope logic).
+
 ##### Key pattern syntax
 
 A special syntax similar to file glob patterns is used throughout i18n-tasks to match translation keys:
@@ -333,6 +346,7 @@ A special syntax similar to file glob patterns is used throughout i18n-tasks to 
 |:------------:|:----------------------------------------------------------|
 |      `*`     | matches everything                                        |
 |      `:`     | matches a single key                                      |
+|      `*:`    | matches part of a single key                              |
 |   `{a, b.c}` | match any in set, can use `:` and `*`, match is captured  |
 
 Example of usage:
@@ -353,7 +367,7 @@ If you have implemented a custom adapter please share it on [the wiki][wiki].
 
 ### Usage search
 
-i18n-tasks uses an AST scanner for `.rb` files, and a regexp scanner for all other files.
+i18n-tasks uses an AST scanner for `.rb` and `.html.erb` files, and a regexp scanner for all other files.
 New scanners can be added easily: please refer to [this example](https://github.com/glebm/i18n-tasks/wiki/A-custom-scanner-example).
 
 See the `search` section in the [config file][config] for all available configuration options.
@@ -394,7 +408,14 @@ Put the key in `GOOGLE_TRANSLATE_API_KEY` environment variable or in the config 
 ```yaml
 # config/i18n-tasks.yml
 translation:
+  backend: google
   google_translate_api_key: <Google Translate API key>
+```
+
+or via environment variable:
+
+```bash
+GOOGLE_TRANSLATE_API_KEY=<Google Translate API key>
 ```
 
 <a name="deepl-translation-config"></a>
@@ -405,9 +426,23 @@ translation:
 ```yaml
 # config/i18n-tasks.yml
 translation:
+  backend: deepl
   deepl_api_key: <DeepL Pro API key>
   deepl_host: <optional>
   deepl_version: <optional>
+  deepl_glossary_ids:
+    - f28106eb-0e06-489e-82c6-8215d6f95089
+    - 2c6415be-1852-4f54-9e1b-d800463496b4
+  deepl_options:
+    formality: prefer_less
+```
+
+or via environment variables:
+
+```bash
+DEEPL_API_KEY=<DeepL Pro API key>
+DEEPL_HOST=<optional>
+DEEPL_VERSION=<optional>
 ```
 
 <a name="yandex-translation-config"></a>
@@ -418,7 +453,58 @@ translation:
 ```yaml
 # config/i18n-tasks.yml
 translation:
+  backend: yandex
   yandex_api_key: <Yandex API key>
+```
+
+or via environment variable:
+
+```bash
+YANDEX_API_KEY=<Yandex API key>
+```
+
+<a name="openai-translation-config"></a>
+### OpenAI Translate
+
+`i18n-tasks translate-missing` requires a OpenAI API key, get it at [OpenAI](https://openai.com/).
+
+```yaml
+# config/i18n-tasks.yml
+translation:
+  backend: openai
+  openai_api_key: <OpenAI API key>
+  openai_model: <optional>
+```
+
+or via environment variable:
+
+```bash
+OPENAI_API_KEY=<OpenAI API key>
+OPENAI_MODEL=<optional>
+```
+
+### Contextual Rails Parser
+
+There is an experimental feature to parse Rails with more context. `i18n-tasks` will support:
+- Translations called in `before_actions`
+- Translations called in nested methods
+- `Model.human_attribute_name` calls
+- `Model.model_name.human` calls
+
+Enabled it by adding the scanner in your `config/i18n-tasks.yml`:
+
+```ruby
+<% I18n::Tasks.add_scanner( 
+  'I18n::Tasks::Scanners::PrismScanner',
+  only: %w(*.rb)
+) %>
+```
+
+To only enable Ruby-scanning and not any Rails support, please add config under the `search` section:
+
+```yaml
+search:
+  prism_visitor: "ruby" # default "rails"
 ```
 
 ## Interactive console
@@ -434,15 +520,28 @@ See [i18n-tasks wiki: CSV import and export tasks](https://github.com/glebm/i18n
 Tasks that come with the gem are defined in [lib/i18n/tasks/command/commands](lib/i18n/tasks/command/commands).
 Custom tasks can be added easily, see the examples [on the wiki](https://github.com/glebm/i18n-tasks/wiki#custom-tasks).
 
+# Development
+
+- Install dependencies using `bundle install`
+- Run tests using `bundle exec rspec`
+- Install [Overcommit](https://github.com/sds/overcommit) by running `overcommit --install`
+
+## Skip Overcommit-hooks
+
+- `SKIP=RuboCop git commit`
+- `OVERCOMMIT_DISABLE=1 git commit`
+
+
 [MIT license]: /LICENSE.txt
 [ci]: https://github.com/glebm/i18n-tasks/actions/workflows/tests.yml
 [badge-ci]: https://github.com/glebm/i18n-tasks/actions/workflows/tests.yml/badge.svg
 [coverage]: https://codeclimate.com/github/glebm/i18n-tasks
 [badge-coverage]: https://api.codeclimate.com/v1/badges/5d173e90ada8df07cedc/test_coverage
-[config]: https://github.com/glebm/i18n-tasks/blob/master/templates/config/i18n-tasks.yml
+[config]: https://github.com/glebm/i18n-tasks/blob/main/templates/config/i18n-tasks.yml
 [wiki]: https://github.com/glebm/i18n-tasks/wiki "i18n-tasks wiki"
 [i18n-gem]: https://github.com/svenfuchs/i18n "svenfuchs/i18n on Github"
 [screenshot-i18n-tasks]: https://i.imgur.com/XZBd8l7.png "i18n-tasks screenshot"
 [screenshot-find]: https://i.imgur.com/VxBrSfY.png "i18n-tasks find output screenshot"
-[adapter-example]: https://github.com/glebm/i18n-tasks/blob/master/lib/i18n/tasks/data/file_system_base.rb
+[adapter-example]: https://github.com/glebm/i18n-tasks/blob/main/lib/i18n/tasks/data/file_system_base.rb
 [custom-scanner-docs]: https://github.com/glebm/i18n-tasks/wiki/A-custom-scanner-example
+[overcommit]: https://github.com/sds/overcommit#installation
