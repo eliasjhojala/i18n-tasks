@@ -24,7 +24,7 @@ i18n-tasks can be used with any project using the ruby [i18n gem][i18n-gem] (def
 Add i18n-tasks to the Gemfile:
 
 ```ruby
-gem 'i18n-tasks', '~> 1.0.14', group: :development
+gem 'i18n-tasks', '~> 1.0.15', group: :development
 ```
 
 Copy the default [configuration file](#configuration):
@@ -100,6 +100,7 @@ Available backends:
 - `deepl` - [DeepL Pro](#deepl-translation-config)
 - `yandex` - [Yandex Translate](#yandex-translation-config)
 - `openai` - [OpenAI](#openai-translation-config)
+- `watsonx` - [watsonx](#watsonx-translation-config)
 
 ### Find usages
 
@@ -421,7 +422,7 @@ GOOGLE_TRANSLATE_API_KEY=<Google Translate API key>
 <a name="deepl-translation-config"></a>
 ### DeepL Pro Translate
 
-`i18n-tasks translate-missing` requires a DeepL Pro API key, get it at [DeepL](https://www.deepl.com/pro).
+`i18n-tasks translate-missing` requires a DeepL Pro API key, get it at [DeepL](https://www.deepl.com/pro). You can specify alias locales if you only use the simple locales internally.
 
 ```yaml
 # config/i18n-tasks.yml
@@ -435,6 +436,9 @@ translation:
     - 2c6415be-1852-4f54-9e1b-d800463496b4
   deepl_options:
     formality: prefer_less
+  deepl_locale_aliases:
+    en: en-us
+    pt: pt-br
 ```
 
 or via environment variables:
@@ -481,6 +485,28 @@ or via environment variable:
 ```bash
 OPENAI_API_KEY=<OpenAI API key>
 OPENAI_MODEL=<optional>
+```
+
+<a name="watsonx-translation-config"></a>
+### watsonx Translate
+
+`i18n-tasks translate-missing` requires a watsonx project and api key, get it at [IBM watsonx](https://www.ibm.com/watsonx/).
+
+```yaml
+# config/i18n-tasks.yml
+translation:
+  backend: watsonx
+  watsonx_api_key: <watsonx API key>
+  watsonx_project_id: <watsonx project id>
+  watsonx_model: <optional>
+```
+
+or via environment variable:
+
+```bash
+WATSONX_API_KEY=<watsonx API key>
+WATSONX_PROJECT_ID=<watsonx project id>
+WATSONX_MODEL=<optional>
 ```
 
 ### Contextual Rails Parser

@@ -13,15 +13,19 @@ RSpec.describe 'PrismScanner' do
             before_action('method_in_before_action2', except: %i[create])
 
             def create
-              t('.relative_key')
-              t('absolute_key')
-              I18n.t('very_absolute_key')
-              I18n.t('.other_relative_key')
+              value = t('.relative_key')
+              @key = t('absolute_key')
+              some_method || I18n.t('very_absolute_key') && other
+              -> { I18n.t('.other_relative_key') }
               method_a
             end
 
             def custom_action
-              t('.relative_key')
+              value = if this
+                t('.relative_key')
+              else
+                I18n.t('absolute_key')
+              end
               method_a
             end
 
@@ -57,10 +61,65 @@ RSpec.describe 'PrismScanner' do
         )
       end
 
+      it 'empty controller' do
+        source = <<~RUBY
+          class ApplicationController < ActionController::Base
+          end
+        RUBY
+        expect(
+          process_string('app/controllers/application_controller.rb', source)
+        ).to be_empty
+      end
+
+      it 'handles empty method' do
+        source = <<~RUBY
+          class EventsController < ApplicationController
+            def create
+            end
+          end
+        RUBY
+
+        expect(
+          process_string('app/controllers/events_controller.rb', source)
+        ).to be_empty
+      end
+
+      it 'handles call with same name' do
+        source = <<~RUBY
+          class EventsController < ApplicationController
+            def new
+              @user = User.new
+            end
+          end
+        RUBY
+
+        expect(
+          process_string('app/controllers/events_controller.rb', source)
+        ).to be_empty
+      end
+
+      it 'handles more syntax' do
+        occurrences =
+          process_path('./spec/fixtures/prism_controller.rb')
+
+        expect(occurrences.map(&:first).uniq).to match_array(
+          %w[
+            prism.prism.index.label
+            prism.prism.show.relative_key
+            prism.show.assign
+            prism.show.multiple
+          ]
+        )
+      end
+
       it 'handles before_action as lambda' do
         source = <<~RUBY
           class EventsController < ApplicationController
             before_action -> { t('.before_action') }, only: :create
+            before_action { non_existent if what? }
+            before_action do
+              t('.before_action2')
+            end
 
             def create
               t('.relative_key')
@@ -72,7 +131,7 @@ RSpec.describe 'PrismScanner' do
           process_string('app/controllers/events_controller.rb', source)
 
         expect(occurrences.map(&:first).uniq).to match_array(
-          %w[events.create.relative_key events.create.before_action]
+          %w[events.create.relative_key events.create.before_action events.create.before_action2]
         )
       end
 
@@ -224,38 +283,54 @@ RSpec.describe 'PrismScanner' do
     end
 
     describe 'magic comments' do
-      it 'i18n-tasks-use' do
+      it 'i18n-tasks-use' do # rubocop:disable RSpec/MultipleExpectations
         source = <<~'RUBY'
           # i18n-tasks-use t('translation.from.comment')
           SpecialMethod.translate_it
           # i18n-tasks-use t('scoped.translation.key1')
           I18n.t("scoped.translation.#{variable}")
+
+          # i18n-tasks-use t('translation.from.comment2')
+          # i18n-tasks-use t('translation.from.comment3')
         RUBY
 
         occurrences =
           process_string('spec/fixtures/used_keys/app/controllers/a.rb', source)
 
-        expect(occurrences.size).to eq(2)
+        expect(occurrences.size).to eq(4)
 
         expect(occurrences.map(&:first)).to match_array(
-          %w[translation.from.comment scoped.translation.key1]
+          %w[
+            translation.from.comment
+            scoped.translation.key1
+            translation.from.comment2
+            translation.from.comment3
+          ]
         )
 
-        occurrence = occurrences.first.last
+        occurrence = occurrences.find { |key, _| key == 'translation.from.comment' }.last
         expect(occurrence.path).to eq(
           'spec/fixtures/used_keys/app/controllers/a.rb'
         )
         expect(occurrence.line_num).to eq(2)
         expect(occurrence.line).to eq('SpecialMethod.translate_it')
 
-        occurrence = occurrences.last.last
-
+        occurrence = occurrences.find { |key, _| key == 'scoped.translation.key1' }.last
         expect(occurrence.path).to eq(
           'spec/fixtures/used_keys/app/controllers/a.rb'
         )
         expect(occurrence.line_num).to eq(4)
         expect(occurrence.line).to eq(
           "I18n.t(\"scoped.translation.\#{variable}\")"
+        )
+
+        occurrence = occurrences.find { |key, _| key == 'translation.from.comment3' }.last
+        expect(occurrence.path).to eq(
+          'spec/fixtures/used_keys/app/controllers/a.rb'
+        )
+        expect(occurrence.line_num).to eq(7)
+        expect(occurrence.line).to eq(
+          "# i18n-tasks-use t('translation.from.comment3')"
         )
       end
 
@@ -346,7 +421,7 @@ RSpec.describe 'PrismScanner' do
 
             def create
               t('.relative_key')
-              I18n.t("absolute_key")
+              I18n.t("absolute_key", wha: 'ever')
               method_b
             end
 
@@ -397,7 +472,12 @@ RSpec.describe 'PrismScanner' do
           'spec/fixtures/used_keys/app/controllers/events_controller.rb'
         )
       expect(occurrences.map(&:first).uniq).to match_array(
-        %w[absolute_key events.create.relative_key very_absolute_key events.method_a.from_before_action]
+        %w[
+          absolute_key
+          events.create.relative_key
+          events.method_a.from_before_action
+          very_absolute_key
+        ]
       )
     end
   end
@@ -407,14 +487,11 @@ RSpec.describe 'PrismScanner' do
   end
 
   def process_string(path, string, visitor: 'rails')
-    parsed = I18n::Tasks::Scanners::PrismScanner::PARSER.parse(string).value
-    comments =
-      I18n::Tasks::Scanners::PrismScanner::PARSER.parse_comments(string)
+    results = I18n::Tasks::Scanners::PrismScanner::PARSER.parse(string)
     I18n::Tasks::Scanners::PrismScanner.new(config: { prism_visitor: visitor }).send(
-      :process_prism_parse_result,
+      :process_results,
       path,
-      parsed,
-      comments
+      results
     )
   end
 end
