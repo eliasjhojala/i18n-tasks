@@ -1,12 +1,12 @@
 # frozen_string_literal: true
 
-require 'i18n/tasks/scanners/ruby_parser_factory'
+require "i18n/tasks/scanners/ruby_parser_factory"
 
 module I18n::Tasks::Scanners
   class LocalRubyParser
     # ignore_blocks feature inspired by shopify/better-html
     # https://github.com/Shopify/better-html/blob/087943ffd2a5877fa977d71532010b0c91239519/lib/better_html/test_helper/ruby_node.rb#L24
-    BLOCK_EXPR = /\s*((\s+|\))do|\{)(\s*\|[^|]*\|)?\s*\Z/.freeze
+    BLOCK_EXPR = /\s*((\s+|\))do|\{)(\s*\|[^|]*\|)?\s*\Z/
 
     def initialize(ignore_blocks: false)
       @parser = RubyParserFactory.create_parser
@@ -15,12 +15,12 @@ module I18n::Tasks::Scanners
 
     # Parse string and normalize location
     def parse(source, location: nil)
-      buffer = ::Parser::Source::Buffer.new('(string)')
+      buffer = ::Parser::Source::Buffer.new("(string)")
       buffer.source = if @ignore_blocks
-                        source.sub(BLOCK_EXPR, '')
-                      else
-                        source
-                      end
+        source.sub(BLOCK_EXPR, "")
+      else
+        source
+      end
 
       @parser.reset
       ast, comments = @parser.parse_with_comments(buffer)
@@ -42,7 +42,7 @@ module I18n::Tasks::Scanners
       node.updated(
         nil,
         node.children.map { |child| normalize_location(child, location) },
-        { location: updated_location(location, node.location) }
+        {location: updated_location(location, node.location)}
       )
     end
 

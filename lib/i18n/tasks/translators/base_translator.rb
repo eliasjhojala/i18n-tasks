@@ -1,9 +1,12 @@
 # frozen_string_literal: true
 
+require "i18n/tasks/data/language_names"
+
 module I18n::Tasks
   module Translators
     class BaseTranslator
       include ::I18n::Tasks::Logging
+
       # @param [I18n::Tasks::BaseTask] i18n_tasks
       def initialize(i18n_tasks)
         @i18n_tasks = i18n_tasks
@@ -16,9 +19,24 @@ module I18n::Tasks
         forest.inject @i18n_tasks.empty_forest do |result, root|
           pairs = root.key_values(root: true)
 
-          @progress_bar = ProgressBar.create(total: pairs.flatten.size, format: '%a <%B> %e %c/%C (%p%%)')
+          @progress_bar = ProgressBar.create(total: pairs.flatten.size, format: "%a <%B> %e %c/%C (%p%%)")
 
-          translated = translate_pairs(pairs, to: root.key, from: from)
+          begin
+            translated = translate_pairs(pairs, to: root.key, from: from)
+          rescue => e
+            warn "Translation for locale #{root.key} failed: #{e.message}"
+            # If translate_pairs raised, try to salvage any partial translations
+            # by attempting to translate each slice individually and collecting successes.
+            translated = []
+            pairs.group_by { |k_v| @i18n_tasks.html_key? k_v[0], from }.each do |_is_html, list_slice|
+              translated.concat(fetch_translations(list_slice, to: root.key, from: from))
+            rescue => e2
+              warn "Partial translation failed for locale #{root.key}: #{e2.message} - leaving keys untranslated"
+              # leave the original list_slice untranslated
+              translated.concat(list_slice)
+            end
+          end
+
           result.merge! Data::Tree::Siblings.from_flat_pairs(translated)
         end
       end
@@ -37,6 +55,10 @@ module I18n::Tasks
         list -= reference_key_vals
         result = list.group_by { |k_v| @i18n_tasks.html_key? k_v[0], opts[:from] }.map do |is_html, list_slice|
           fetch_translations(list_slice, opts.merge(is_html ? options_for_html : options_for_plain))
+        rescue => e
+          warn "Translation slice failed: #{e.message} - leaving slice untranslated"
+          # Return the original untranslated slice so already completed translations are preserved
+          list_slice
         end.reduce(:+) || []
         result.concat(reference_key_vals)
         result.sort! { |a, b| key_pos[a[0]] <=> key_pos[b[0]] }
@@ -108,8 +130,7 @@ module I18n::Tasks
         end
       end
 
-      INTERPOLATION_KEY_RE = /%\{[^}]+}/.freeze
-      UNTRANSLATABLE_STRING = 'X__'
+      INTERPOLATION_KEY_RE = /%\{[^}]+}/
 
       # @param [String] value
       # @return [String] 'hello, %{name}' => 'hello, <round-trippable string>'
@@ -117,7 +138,7 @@ module I18n::Tasks
         i = -1
         value.gsub INTERPOLATION_KEY_RE do
           i += 1
-          "#{UNTRANSLATABLE_STRING}#{i}"
+          "X__#{i}"
         end
       end
 
@@ -125,13 +146,13 @@ module I18n::Tasks
       # @param [String] translated
       # @return [String] 'hello, <round-trippable string>' => 'hello, %{name}'
       def restore_interpolations(untranslated, translated)
-        return translated if untranslated !~ INTERPOLATION_KEY_RE
+        return translated if !INTERPOLATION_KEY_RE.match?(untranslated)
 
         values = untranslated.scan(INTERPOLATION_KEY_RE)
-        translated.gsub(/#{Regexp.escape(UNTRANSLATABLE_STRING)}\d+/i) do |m|
-          values[m[UNTRANSLATABLE_STRING.length..].to_i]
+        translated.gsub(/X__(\d+)/) do |m|
+          values[$1.to_i]
         end
-      rescue StandardError => e
+      rescue => e
         raise_interpolation_error(untranslated, translated, e)
       end
 
@@ -148,24 +169,29 @@ module I18n::Tasks
       # @param [Hash] options
       # @return [Array<String>]
       # @abstract
-      def translate_values(list, **options); end
+      def translate_values(list, **options)
+      end
 
       # @param [Hash] options
       # @return [Hash]
       # @abstract
-      def options_for_translate_values(options); end
+      def options_for_translate_values(options)
+      end
 
       # @return [Hash]
       # @abstract
-      def options_for_html; end
+      def options_for_html
+      end
 
       # @return [Hash]
       # @abstract
-      def options_for_plain; end
+      def options_for_plain
+      end
 
       # @return [String]
       # @abstract
-      def no_results_error_message; end
+      def no_results_error_message
+      end
     end
   end
 end

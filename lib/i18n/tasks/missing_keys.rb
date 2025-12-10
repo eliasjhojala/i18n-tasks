@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require 'set'
+require "set"
 module I18n::Tasks
   module MissingKeys # rubocop:disable Metrics/ModuleLength
     MISSING_TYPES = %w[
@@ -21,7 +21,7 @@ module I18n::Tasks
     # @return [Siblings]
     def missing_keys(locales: nil, types: nil, base_locale: nil)
       locales ||= self.locales
-      types   ||= missing_keys_types
+      types ||= missing_keys_types
       base = base_locale || self.base_locale
       types.inject(empty_forest) do |f, type|
         f.merge! send(:"missing_#{type}_forest", locales, base)
@@ -88,7 +88,7 @@ module I18n::Tasks
 
     # Loads rails-i18n pluralization config for the given locale.
     def load_rails_i18n_pluralization!(locale)
-      path = File.join(Gem::Specification.find_by_name('rails-i18n').gem_dir, 'rails', 'pluralization', "#{locale}.rb")
+      path = File.join(Gem::Specification.find_by_name("rails-i18n").gem_dir, "rails", "pluralization", "#{locale}.rb")
       eval(File.read(path), binding, path) # rubocop:disable Security/Eval
     end
 
@@ -98,7 +98,7 @@ module I18n::Tasks
         locale_key_missing? locale, depluralize_key(key, compared_to)
       end.set_root_key!(locale, type: :missing_diff).keys do |_key, node|
         # change path and locale to base
-        data = { locale: locale, missing_diff_locale: node.data[:locale] }
+        data = {locale: locale, missing_diff_locale: node.data[:locale]}
         if node.data.key?(:path)
           data[:path] = LocalePathname.replace_locale(node.data[:path], node.data[:locale], locale)
         end
@@ -108,8 +108,24 @@ module I18n::Tasks
 
     # keys used in the code missing translations in locale
     def missing_used_tree(locale)
-      used_tree(strict: true).select_keys do |key, _node|
-        locale_key_missing?(locale, key)
+      used_tree(strict: true).select_keys do |key, node|
+        occurrences = node.data[:occurrences] || []
+
+        # An occurrence may carry candidate keys (for relative lookups). If any
+        # candidate key exists in the locale, the usage is considered present.
+        occurrences_all_missing = occurrences.all? do |occ|
+          candidates = if occ.respond_to?(:candidate_keys) && occ.candidate_keys.present?
+            occ.candidate_keys
+          else
+            # fallback to the scanned key
+            [key]
+          end
+
+          # Occurrence is missing iff all its candidates are missing
+          candidates.all? { |c| locale_key_missing?(locale, c) }
+        end
+
+        occurrences_all_missing
       end.set_root_key!(locale, type: :missing_used)
     end
 
@@ -130,7 +146,7 @@ module I18n::Tasks
     # @yieldreturn [Boolean] whether to collapse the node
     def collapse_same_key_in_locales!(forest)
       locales_and_node_by_key = {}
-      to_remove               = []
+      to_remove = []
       forest.each do |root|
         locale = root.key
         root.keys do |key, node|
@@ -146,7 +162,7 @@ module I18n::Tasks
       end
       forest.remove_nodes_and_emptied_ancestors! to_remove
       locales_and_node_by_key.each_with_object({}) do |(key, (locales, node)), inv|
-        (inv[locales.sort.join('+')] ||= []) << [key, node]
+        (inv[locales.sort.join("+")] ||= []) << [key, node]
       end.map do |locales, keys_nodes|
         keys_nodes.each do |(key, node)|
           forest["#{locales}.#{key}"] = node

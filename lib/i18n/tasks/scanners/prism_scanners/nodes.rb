@@ -4,14 +4,16 @@
 # Used in the PrismScanners::Visitor class.
 module I18n::Tasks::Scanners::PrismScanners
   class Root
-    attr_reader(:calls, :translation_calls, :children, :node, :parent)
+    attr_reader(:calls, :translation_calls, :children, :node, :parent, :rails, :file_path)
 
-    def initialize(node: nil, parent: nil)
+    def initialize(node: nil, parent: nil, file_path: nil, rails: false)
       @calls = []
       @translation_calls = []
       @children = []
       @node = node
       @parent = parent
+      @rails = rails
+      @file_path = file_path
     end
 
     def add_child(node)
@@ -24,39 +26,59 @@ module I18n::Tasks::Scanners::PrismScanners
     end
 
     def add_translation_call(translation_call)
-      @translation_calls << translation_call
+      @translation_calls += Array(translation_call)
+    end
+
+    def rails_view?
+      rails && file_path.present? && file_path.include?("app/views/")
     end
 
     def support_relative_keys?
-      false
+      rails_view?
     end
 
-    def private_method
+    def support_candidate_keys?
       false
     end
 
     def path
-      []
+      if rails_view?
+        folder_path = file_path.sub(%r{app/views/}, "").split("/")
+        name = folder_path.pop.split(".").first
+        # Remove leading underscores from partials
+        name = name[1..] if name.start_with?("_")
+
+        [*folder_path, name]
+      else
+        []
+      end
     end
 
     def process
       (@translation_calls + @children.flat_map(&:process)).flatten
     end
+
+    # Only supported for Rails controllers currently
+    def private_method
+      false
+    end
   end
 
   class TranslationCall
+    class ScopeError < StandardError; end
     attr_reader(:node, :key, :receiver, :options, :parent)
 
-    def initialize(node:, key:, receiver:, options:, parent:)
+    def initialize(node:, key:, receiver:, options:, parent:, candidate_keys: nil)
       @node = node
       @key = key
       @receiver = receiver
       @options = options
       @parent = parent
+      @candidate_keys = candidate_keys || []
     end
 
     def relative_key?
-      @key&.start_with?('.') && @receiver.nil?
+      @key&.start_with?(".") && @receiver.nil?
     end
 
     def with_parent(parent)
@@ -83,34 +105,54 @@ module I18n::Tasks::Scanners::PrismScanners
       occurrence(file_path)
     end
 
+    # Returns either a single key string or an array of candidate key strings for this call.
     def full_key
       return nil if key.nil?
       return nil unless key.is_a?(String)
       return nil if relative_key? && !support_relative_keys?
 
-      parts = [scope]
+      base_parts = [scope].compact
 
-      if relative_key?
-        parts.concat(parent&.path || [])
-        parts << key
+      if relative_key? && support_candidate_keys?
+        # For relative keys in controllers/methods, generate candidate keys by
+        # progressively stripping trailing path segments from the parent path.
+        # Example: parent.path = ["events", "create"], key = ".success"
+        # yields: ["events.create.success", "events.success"]
+        parent_path = parent&.path || []
+        rel_key = key[1..] # strip leading dot # rubocop:disable Performance/ArraySemiInfiniteRangeSlice
 
-        # TODO: Fallback to controller without action name
-      elsif key.start_with?('.')
-        parts << key[1..]
+        candidates = []
+        parent_path_length = parent_path.length
+        # Do not generate an unscoped bare key (keep_count = 0). Start from full parent path
+        parent_path_length.downto(1) do |keep_count|
+          parts = base_parts + parent_path.first(keep_count) + [rel_key]
+          candidates << parts.compact.join(".")
+        end
+
+        candidates.map { |c| c.gsub("..", ".") }
+      elsif relative_key?
+        # For relative keys in views, just append to the full path
+        [base_parts + parent.path + [key[1..]]].flatten.compact.join(".").gsub("..", ".") # rubocop:disable Performance/ChainArrayAllocation
+      elsif key.start_with?(".")
+        [base_parts + [key[1..]]].flatten.compact.join(".").gsub("..", ".") # rubocop:disable Performance/ArraySemiInfiniteRangeSlice,Performance/ChainArrayAllocation
+      elsif @candidate_keys.present?
+        ([key] + @candidate_keys).map do |c|
+          [base_parts + [c]].flatten.compact.join(".").gsub("..", ".") # rubocop:disable Performance/ChainArrayAllocation
+        end
       else
-        parts << key
+        [base_parts + [key]].flatten.compact.join(".").gsub("..", ".") # rubocop:disable Performance/ChainArrayAllocation
       end
-
-      parts.compact.join('.').gsub('..', '.')
     end
 
     private
 
     def scope
       return nil if @options.nil?
-      return nil unless @options['scope']
+      return nil unless @options["scope"]
 
-      Array(@options['scope']).compact.map(&:to_s).join('.')
+      fail(ScopeError, "Could not process scope") if @options.key?("scope") && (Array(@options["scope"]).empty? || !Array(@options["scope"]).all? { |s| s.is_a?(String) || s.is_a?(Symbol) })
+
+      Array(@options["scope"]).join(".")
     end
 
     def occurrence(file_path)
@@ -118,47 +160,43 @@ module I18n::Tasks::Scanners::PrismScanners
 
       location = local_node.location
 
-      final_key = full_key
-      return nil if final_key.nil?
+      final = full_key
+      return nil if final.nil?
 
-      [
-        final_key,
-        ::I18n::Tasks::Scanners::Results::Occurrence.new(
-          path: file_path,
-          line: local_node.respond_to?(:slice) ? local_node.slice : local_node.location.slice,
-          pos: location.start_offset,
-          line_pos: location.start_column,
-          line_num: location.start_line,
-          raw_key: key
-        )
-      ]
-    end
+      occurrence = ::I18n::Tasks::Scanners::Results::Occurrence.new(
+        path: file_path,
+        line: local_node.respond_to?(:slice) ? local_node.slice : local_node.location.slice,
+        pos: location.start_offset,
+        line_pos: location.start_column,
+        line_num: location.start_line,
+        raw_key: key,
+        candidate_keys: Array(final)
+      )
 
-    def occurrences_from_comments(file_path)
-      Array(@comment_translations).flat_map do |child_node|
-        child_node.with_context(
-          path: @path,
-          options: {
-            **@context_options,
-            comment_for_node: @node
-          }
-        ).occurrences(file_path)
+      # full_key may be a single String or an Array of candidate strings
+      if final.is_a?(Array)
+        [final.first, occurrence]
+      else
+        [final, occurrence]
       end
+    rescue ScopeError
+      nil
     end
 
     # Only public methods are added to the context path
     # Only some classes supports relative keys
     def support_relative_keys?
-      parent.is_a?(ParsedMethod) && parent.support_relative_keys?
+      (parent.is_a?(ParsedMethod) || parent.is_a?(Root)) && parent.support_relative_keys?
+    end
+
+    # Not supported for Rails views
+    def support_candidate_keys?
+      support_relative_keys? && parent.support_candidate_keys?
     end
   end
 
   class ParsedModule < Root
     def support_relative_keys?
-      false
-    end
-
-    def private_method
       false
     end
 
@@ -179,9 +217,8 @@ module I18n::Tasks::Scanners::PrismScanners
       @methods = []
       @private_methods = []
       @before_actions = []
-      @rails = rails
 
-      super(node: node, parent: parent)
+      super
     end
 
     def add_child(node)
@@ -200,8 +237,14 @@ module I18n::Tasks::Scanners::PrismScanners
     end
 
     def process # rubocop:disable Metrics/AbcSize,Metrics/CyclomaticComplexity,Metrics/MethodLength,Metrics/PerceivedComplexity
-      return @children.flat_map(&:process) unless controller?
+      if controller?
+        process_controller
+      else
+        super
+      end
+    end
 
+    def process_controller
       methods_by_name = @methods.group_by(&:name)
       private_methods_by_name = @private_methods.group_by(&:name)
 
@@ -221,7 +264,9 @@ module I18n::Tasks::Scanners::PrismScanners
           next unless before_action.applies_to?(method.name)
 
           method.add_translation_call(
-            translation_calls.map { |call| call.with_parent(method) }
+            translation_calls.map do |call|
+              call.with_parent(method)
+            end
           )
         end
       end
@@ -240,7 +285,7 @@ module I18n::Tasks::Scanners::PrismScanners
           nested_calls[method.name] << other_method.name
 
           if nested_calls[call.name]&.include?(method.name)
-            fail(ArgumentError, "Cyclic call detected: #{call.name} -> #{method.name}")
+            next
           end
 
           other_method.translation_calls.each do |translation_call|
@@ -249,7 +294,7 @@ module I18n::Tasks::Scanners::PrismScanners
         end
       end
 
-      @children.flat_map(&:process) + new_translation_calls
+      @translation_calls + @children.flat_map(&:process) + new_translation_calls
     end
 
     def private_methods!
@@ -257,7 +302,11 @@ module I18n::Tasks::Scanners::PrismScanners
     end
 
     def support_relative_keys?
-      @rails && controller?
+      controller? || mailer?
+    end
+
+    def support_candidate_keys?
+      controller?
     end
 
     def path
@@ -265,12 +314,16 @@ module I18n::Tasks::Scanners::PrismScanners
     end
 
     def controller?
-      @node.name.to_s.end_with?('Controller')
+      @rails && @node.name.to_s.end_with?("Controller")
+    end
+
+    def mailer?
+      @rails && @node.name.to_s.end_with?("Mailer")
     end
 
     def path_name
       path = @node.constant_path.full_name_parts.map { |s| s.to_s.underscore }
-      path.last.gsub!(/_controller\z/, '') if controller?
+      path.last.delete_suffix!("_controller") if controller?
 
       path
     end
@@ -287,6 +340,8 @@ module I18n::Tasks::Scanners::PrismScanners
       !@private_method && @parent&.support_relative_keys?
     end
 
+    delegate(:support_candidate_keys?, to: :parent)
+
     def path
       (@parent&.path || []) + [@node.name]
     end
@@ -301,7 +356,7 @@ module I18n::Tasks::Scanners::PrismScanners
   end
 
   class ParsedBeforeAction < Root
-    attr_reader(:name)
+    attr_accessor(:name, :only, :except)
 
     def initialize(node:, parent:, name: nil, only: nil, except: nil)
       @name = name
@@ -312,7 +367,7 @@ module I18n::Tasks::Scanners::PrismScanners
     end
 
     def support_relative_keys?
-      true
+      false
     end
 
     def applies_to?(method_name)
@@ -329,6 +384,10 @@ module I18n::Tasks::Scanners::PrismScanners
 
     def path
       @parent&.path || []
+    end
+
+    def process
+      @translation_calls.filter { |call| !call.relative_key? }
     end
   end
 end

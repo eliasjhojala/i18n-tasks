@@ -4,11 +4,11 @@
 module FixturesSupport
   def fixtures_contents
     @fixtures_contents ||= begin
-      fixtures_path = 'spec/fixtures'
+      fixtures_path = "spec/fixtures"
       Dir.glob("#{fixtures_path}/**/*").inject({}) do |h, path|
         next h if File.directory?(path)
 
-        h.update(path[fixtures_path.length + 1..] => Pathname.new(path).read)
+        h.update(path[(fixtures_path.length + 1)..] => Pathname.new(path).read)
       end
     end
   end

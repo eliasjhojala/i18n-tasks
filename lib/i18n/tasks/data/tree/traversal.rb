@@ -1,13 +1,13 @@
 # frozen_string_literal: true
 
-require 'set'
+require "set"
 
 module I18n::Tasks
   module Data::Tree
     # Any Enumerable that yields nodes can mix in this module
     module Traversal # rubocop:disable Metrics/ModuleLength
-      def nodes(&block)
-        depth_first(&block)
+      def nodes(&)
+        depth_first(&)
       end
 
       def leaves(&visitor)
@@ -76,13 +76,13 @@ module I18n::Tasks
 
       def root_key_values(sort = false)
         result = keys(root: false).map { |key, node| [node.root.key, key, node.value] }
-        result.sort! { |a, b| a[0] == b[0] ? a[1] <=> b[1] : a[0] <=> b[0] } if sort
+        result.sort! { |a, b| (a[0] == b[0]) ? a[1] <=> b[1] : a[0] <=> b[0] } if sort
         result
       end
 
       def root_key_value_data(sort = false)
         result = keys(root: false).map { |key, node| [node.root.key, key, node.value, node.data] }
-        result.sort! { |a, b| a[0] == b[0] ? a[1] <=> b[1] : a[0] <=> b[0] } if sort
+        result.sort! { |a, b| (a[0] == b[0]) ? a[1] <=> b[1] : a[0] <=> b[0] } if sort
         result
       end
 

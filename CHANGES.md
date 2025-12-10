@@ -1,3 +1,51 @@
+## Unreleased
+
+- Rails partials allow relative keys, now it is supported by both Parser and Prism scanners
+  and is covered by tests.
+- `check-prism` makes better comparison between parsers for candidate keys.
+
+## v1.1.2
+
+- Prism: Missing `require 'prism'` in the scanners fixed.
+
+## v1.1.1
+
+- Prism: Fixes `translate` calls on non-I18n receivers being processed. (https://github.com/glebm/i18n-tasks/pull/684)
+- Prism: Adds candidate keys for model_name.human and human_attribute_name. (https://github.com/glebm/i18n-tasks/pull/684)
+  - `Event.human_attribute_name(:title)` will now match `activerecord.attributes.event.title` or `attributes.title`.
+- Prism: Candidate keys were not added to the `used_tree`. (https://github.com/glebm/i18n-tasks/pull/684)
+- Works around a concurrency bug by reverting to serial scanning. (https://github.com/glebm/i18n-tasks/pull/687)
+
+## v1.1.0
+
+- Dropping support for Ruby < 3.1 [#631](https://github.com/glebm/i18n-tasks/pull/631)
+- OpenAI translator now uses language names instead of locale codes. [#630](https://github.com/glebm/i18n-tasks/pull/630)
+- Renames RubyAstScanner to RubyScanner (deprecated RubyAstScanner name).
+- Adds Prism as a dependency.
+- Merges PrismScanner into RubyScanner, now configured with:
+
+```yaml
+search:
+  prism: "rails"
+```
+to use the Prism scanner with more Rails support and
+
+```yaml
+search:
+  prism: "ruby"
+```
+to use the Prism Scanner without Rails support.
+- Implements ERB-scanner using Prism, activated with same config as above.
+  - The Prism-based scanner handles comments differently vs the `whitequark/parser`-based scanner does.
+  - The usage will be for the magic comment line instead of the subsequent line.
+  - This should not affect the results of the CLI tasks.
+- Loads environment variables via `dotenv` if available. [#395](https://github.com/glebm/i18n-tasks/issues/395)
+- Adds CLI command `check-prism` to try the new parser out and see the differences in key detection.
+- The Prism-based scanner supports candidate_keys for Rails translations, allowing relative translations in controllers to match either the key scoped to controller and action or only to the controller.
+- Translation services now catch errors and save partial results [#642](https://github.com/glebm/i18n-tasks/issues/642)
+- Prism: Skips translations form cyclic calls instead of throwing error.
+- Adds own client for Google Translate instead of `easy_translate` gem.
+
 ## v1.0.15
 
 * Adds a progress bar for translate tasks. [#606](https://github.com/glebm/i18n-tasks/pull/606)

@@ -1,18 +1,20 @@
 # frozen_string_literal: true
 
-require 'set'
+require "set"
 module I18n::Tasks::PluralKeys
   # Ref: http://cldr.unicode.org/index/cldr-spec/plural-rules
   CLDR_CATEGORY_KEYS = %w[zero one two few many other].freeze
   PLURAL_KEY_SUFFIXES = Set.new CLDR_CATEGORY_KEYS
-  PLURAL_KEY_RE = /\.(?:#{CLDR_CATEGORY_KEYS * '|'})$/.freeze
+  PLURAL_KEY_RE = /\.(?:#{CLDR_CATEGORY_KEYS * "|"})$/
+  # Ref: https://unicode-org.github.io/cldr/ldml/tr35-numbers.html#Explicit_0_1_rules
+  EXPLICIT_0_1 = %w[0 1].freeze
 
   def collapse_plural_nodes!(tree)
     tree.leaves.map(&:parent).compact.uniq.each do |node|
       children = node.children
       next unless plural_forms?(children)
 
-      node.value    = children.to_hash
+      node.value = children.to_hash
       node.children = nil
       node.data.merge! children.first.data
     end
@@ -56,6 +58,6 @@ module I18n::Tasks::PluralKeys
   end
 
   def plural_suffix?(key)
-    PLURAL_KEY_SUFFIXES.include?(key)
+    PLURAL_KEY_SUFFIXES.include?(key) || EXPLICIT_0_1.include?(key)
   end
 end

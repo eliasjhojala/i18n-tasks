@@ -9,51 +9,49 @@ jobs:
 
     steps:
       - name: Clone repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up Ruby
         uses: ruby/setup-ruby@v1
         with:
-          ruby-version: "2.6"
+          ruby-version: "3.1"
           bundler-cache: true
           bundler: latest
           rubygems: latest
 
-      - name: Set-up RuboCop Problem Matcher
-        uses: r7kamura/rubocop-problem-matchers-action@v1
-
       - name: Run rubocop
-        run: bundle exec rubocop
+        run: bundle exec rubocop --format github
+
   test:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        ruby-version: ["3.4", "3.3", "3.2", "3.1", "3.0", "2.7", "2.6", "jruby"]
+        ruby-version:
+          [
+            "3.4",
+            "3.3",
+            "3.2",
+            "3.1",
+            "jruby-10.0.0.1", # The latest JRuby release does not work with prism
+            "jruby-head", # should be fixed in the 10.0.3.0 release.
+            "head",
+          ]
       fail-fast: false
 
     env:
-      CC_TEST_REPORTER_ID: ${{ secrets.CC_TEST_REPORTER_ID }}
       GOOGLE_TRANSLATE_API_KEY: ${{ secrets.GOOGLE_TRANSLATE_API_KEY }}
       COVERAGE: 1
+      RUBYOPT: "--enable-frozen-string-literal --debug-frozen-string-literal"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Set up Ruby ${{ matrix.ruby-version }}
         uses: ruby/setup-ruby@v1
         with:
           ruby-version: ${{ matrix.ruby-version }}
-          bundler-cache: true
+          bundler-cache: ${{ matrix.ruby-version != 'head' }}
           bundler: latest
           rubygems: latest
-      - name: "Determine whether to upload coverage"
-        if: ${{ env.CC_TEST_REPORTER_ID && startsWith(matrix.ruby-version, '3.4') && github.ref == 'refs/heads/main' }}
-        run: echo UPLOAD_COVERAGE=1 >> $GITHUB_ENV
       - name: Install dependencies
         run: bundle install
       - name: Run tests
-        if: ${{ !env.UPLOAD_COVERAGE }}
         run: bundle exec rake
-      - name: Run tests and upload coverage
-        uses: paambaati/codeclimate-action@v9
-        if: ${{ env.UPLOAD_COVERAGE }}
-        with:
-          coverageCommand: bundle exec rake

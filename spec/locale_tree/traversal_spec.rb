@@ -1,8 +1,8 @@
 # frozen_string_literal: true
 
-require 'spec_helper'
+require "spec_helper"
 
-RSpec.describe I18n::Tasks::Data::Tree::Traversal do # rubocop:disable RSpec/FilePath
+RSpec.describe I18n::Tasks::Data::Tree::Traversal do
   delegate :i18n_task, to: :TestCodebase
 
   before do
@@ -13,9 +13,9 @@ RSpec.describe I18n::Tasks::Data::Tree::Traversal do # rubocop:disable RSpec/Fil
     TestCodebase.teardown
   end
 
-  describe '#grep_keys' do
-    it 'returns Siblings' do
-      expect(i18n_task.data['en'].grep_keys(/key/)).to be_a(I18n::Tasks::Data::Tree::Siblings)
+  describe "#grep_keys" do
+    it "returns Siblings" do
+      expect(i18n_task.data["en"].grep_keys(/key/)).to be_a(I18n::Tasks::Data::Tree::Siblings)
     end
   end
 end

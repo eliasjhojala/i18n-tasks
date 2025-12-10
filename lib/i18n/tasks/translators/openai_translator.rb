@@ -1,10 +1,12 @@
 # frozen_string_literal: true
 
-require 'i18n/tasks/translators/base_translator'
-require 'active_support/core_ext/string/filters'
+require "i18n/tasks/translators/base_translator"
+require "active_support/core_ext/string/filters"
 
 module I18n::Tasks::Translators
   class OpenAiTranslator < BaseTranslator
+    include ::I18n::Tasks::Data::LanguageNames
+
     # max allowed texts per request
     BATCH_SIZE = 50
     DEFAULT_SYSTEM_PROMPT = <<~PROMPT.squish
@@ -26,7 +28,7 @@ module I18n::Tasks::Translators
 
     def initialize(*)
       begin
-        require 'openai'
+        require "openai"
       rescue LoadError
         raise ::I18n::Tasks::CommandError, "Add gem 'ruby-openai' to your Gemfile to use this command"
       end
@@ -49,7 +51,7 @@ module I18n::Tasks::Translators
     end
 
     def no_results_error_message
-      I18n.t('i18n_tasks.openai_translate.errors.no_results')
+      I18n.t("i18n_tasks.openai_translate.errors.no_results")
     end
 
     private
@@ -61,29 +63,39 @@ module I18n::Tasks::Translators
     def api_key
       @api_key ||= begin
         key = @i18n_tasks.translation_config[:openai_api_key]
-        fail ::I18n::Tasks::CommandError, I18n.t('i18n_tasks.openai_translate.errors.no_api_key') if key.blank?
+        fail ::I18n::Tasks::CommandError, I18n.t("i18n_tasks.openai_translate.errors.no_api_key") if key.blank?
 
         key
       end
     end
 
     def model
-      @model ||= @i18n_tasks.translation_config[:openai_model].presence || 'gpt-4o-mini'
+      @model ||= @i18n_tasks.translation_config[:openai_model].presence || "gpt-4o-mini"
     end
 
-    def system_prompt
-      @system_prompt ||=
-        (@i18n_tasks.translation_config[:openai_system_prompt].presence || DEFAULT_SYSTEM_PROMPT)
-        .concat("\n#{JSON_FORMAT_INSTRUCTIONS_SYSTEM_PROMPT}")
-      @system_prompt
+    def temperature
+      @temperature ||= @i18n_tasks.translation_config[:openai_temperature].presence || 0.0
+    end
+
+    def system_prompt(to_locale)
+      prompt = if locale_prompts[to_locale].present?
+        locale_prompts[to_locale]
+      else
+        @i18n_tasks.translation_config[:openai_system_prompt].presence || DEFAULT_SYSTEM_PROMPT
+      end
+
+      prompt.concat("\n#{JSON_FORMAT_INSTRUCTIONS_SYSTEM_PROMPT}")
+    end
+
+    def locale_prompts
+      @locale_prompts ||= @i18n_tasks.translation_config[:openai_locale_prompts] || {}
     end
 
     def translate_values(list, from:, to:)
       results = []
 
       list.each_slice(BATCH_SIZE) do |batch|
-        translations = translate(batch, from, to)
-        result = JSON.parse(translations)
+        result = translate(batch, from, to)
         results << result
 
         @progress_bar.progress += result.size
@@ -97,33 +109,32 @@ module I18n::Tasks::Translators
         parameters: {
           model: model,
           messages: build_messages(values, from, to),
-          temperature: 0.0,
-          response_format: { type: 'json_object' }
+          temperature: temperature,
+          response_format: {type: "json_object"}
         }
       )
 
-      translations = response.dig('choices', 0, 'message', 'content')
-      error = response['error']
+      translations = response.dig("choices", 0, "message", "content")
+      error = response["error"]
 
       fail "AI error: #{error}" if error.present?
 
       # Extract the array from the JSON object response
-      result = JSON.parse(translations)
-      result['translations'].to_json
+      JSON.parse(translations)["translations"]
     end
 
     def build_messages(values, from, to)
       [
         {
-          role: 'system',
-          content: format(system_prompt, from: from, to: to)
+          role: "system",
+          content: format(system_prompt(to), from: language_name(from), to: language_name(to))
         },
         {
-          role: 'user',
+          role: "user",
           content: "Translate this array: \n\n\n"
         },
         {
-          role: 'user',
+          role: "user",
           content: values.to_json
         }
       ]

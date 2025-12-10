@@ -24,7 +24,7 @@ i18n-tasks can be used with any project using the ruby [i18n gem][i18n-gem] (def
 Add i18n-tasks to the Gemfile:
 
 ```ruby
-gem 'i18n-tasks', '~> 1.0.15', group: :development
+gem 'i18n-tasks', '~> 1.1.2', group: :development
 ```
 
 Copy the default [configuration file](#configuration):
@@ -227,6 +227,27 @@ See the full list of tasks with `i18n-tasks --help`.
 ✔ Reference keys (keys with `:symbol` values) are fully supported. These keys are copied as-is in
 `add/translate-missing`, and can be looked up by reference or value in `find`.
 
+#### Unexpected normalization
+`i18n-tasks` uses a yaml parser and emitter called `Psych` under the hood. `Psych` has it's own heuristic on when
+to use `|`, `>`, or `""` for multi-line strings. This can have some unexpected consequences, eg when normalizing:
+```yaml
+a: | 
+  Lorem ipsum dolor sit amet, consectetur
+  Lorem ipsum dolor sit amet, consectetur
+b: | 
+  Lorem ipsum dolor sit amet, consectetur 
+  Lorem ipsum dolor sit amet, consectetur 
+```
+we get the result
+```yaml
+a: |
+  Lorem ipsum dolor sit amet, consectetur
+  Lorem ipsum dolor sit amet, consectetur
+b: "Lorem ipsum dolor sit amet, consectetur \nLorem ipsum dolor sit amet, consectetur\n"
+```
+The only difference between `a` and `b` is that `b` has an extra trailing space in each line.
+This is an unfortunate side effect of `i18n-tasks` using `Psych`.
+
 #### `t()` keyword arguments
 
 ✔ `scope` keyword argument is fully supported by the AST scanner, and also by the Regexp scanner but only when it is the first argument.
@@ -366,6 +387,22 @@ truck.contents.description_body ⮕ truck.attributes.description.body
 If you store data somewhere but in the filesystem, e.g. in the database or mongodb, you can implement a custom adapter.
 If you have implemented a custom adapter please share it on [the wiki][wiki].
 
+#### Rails credentials
+
+If you use Rails credentials and want to load e.g. credentials for translation backends, convert your `i18n-tasks.yml`to `i18n-tasks.yml.erb` and add
+a `require "./config/application"` line to load Rails.
+
+```yaml
+# config/i18n-tasks.yml.erb
+<% require "./config/application" %>
+
+# ...
+
+translation:
+  backend: google
+  google_translate_api_key: <%= Rails.application.credentials.google_translate_api_key %>
+```
+
 ### Usage search
 
 i18n-tasks uses an AST scanner for `.rb` and `.html.erb` files, and a regexp scanner for all other files.
@@ -391,6 +428,24 @@ or a `Spree.t(key)` method that returns `t "spree.#{key}"`, use the built-in `Pa
 For more complex cases, you can implement a [custom scanner][custom-scanner-docs].
 
 See the [config file][config] to find out more.
+
+### Environment Variables and Dotenv
+
+i18n-tasks supports loading environment variables from `.env` files using the [dotenv](https://github.com/bkeepers/dotenv) gem.
+This is particularly useful for storing translation API keys and other sensitive configuration.
+
+If you have `dotenv` in your Gemfile, i18n-tasks will automatically load environment variables from `.env` files
+before executing commands. This means you can store your API keys in a `.env` file:
+
+```bash
+# .env
+GOOGLE_TRANSLATE_API_KEY=your_google_api_key
+DEEPL_AUTH_KEY=your_deepl_api_key
+OPENAI_API_KEY=your_openai_api_key
+```
+
+The dotenv integration works seamlessly - no additional configuration is required. If `dotenv` is not available,
+i18n-tasks will continue to work normally using system environment variables.
 
 <a name="google-translation-config"></a>
 ### Google Translate
@@ -444,7 +499,7 @@ translation:
 or via environment variables:
 
 ```bash
-DEEPL_API_KEY=<DeepL Pro API key>
+DEEPL_AUTH_KEY=<DeepL Pro API key>
 DEEPL_HOST=<optional>
 DEEPL_VERSION=<optional>
 ```
@@ -509,29 +564,46 @@ WATSONX_PROJECT_ID=<watsonx project id>
 WATSONX_MODEL=<optional>
 ```
 
-### Contextual Rails Parser
+### Prism-based scanner for Ruby and ERB files
 
-There is an experimental feature to parse Rails with more context. `i18n-tasks` will support:
+There is a scanner based on [Prism](https://github.com/ruby/prism) usable in two different modes.
+
+- `rails` mode parses Rails code and handles context such as controllers, before_actions, model translations and more.
+- `ruby` mode parses Ruby code only, and works similar to the existing whitequark/parser-implementation.
+- The parser is used for both ruby and ERB files.
+
+#### `rails` mode
+
+It handles the following cases:
 - Translations called in `before_actions`
 - Translations called in nested methods
 - `Model.human_attribute_name` calls
 - `Model.model_name.human` calls
 
-Enabled it by adding the scanner in your `config/i18n-tasks.yml`:
-
-```ruby
-<% I18n::Tasks.add_scanner( 
-  'I18n::Tasks::Scanners::PrismScanner',
-  only: %w(*.rb)
-) %>
+Enabled it by adding:
+```yaml
+search:
+  prism: "rails"
 ```
 
-To only enable Ruby-scanning and not any Rails support, please add config under the `search` section:
+to your `config/i18n-tasks.yml` file.
+
+#### `ruby` mode
+
+It finds all `I18n.t`, `I18n.translate`, `t` and `translate` calls in Ruby code. Enabled it by adding:
 
 ```yaml
 search:
-  prism_visitor: "ruby" # default "rails"
+  prism: "ruby"
 ```
+
+The goal is to replace the whitequark/parser-based scanner with this one in the future.
+
+#### Help us out with testing
+
+Please install the latest version of the gem and run `i18n-tasks check-prism` which will parse everything with the whitequark/parser-based scanner and then everything with the Prism-scanner and try to compare the results.
+
+Open up issues with any parser crashes, missed translations or false positives.
 
 ## Interactive console
 
